@@ -52,6 +52,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import com.docreader.Impresion;
 import com.docreader.Recientes;
 
 /**
@@ -62,7 +63,7 @@ import com.docreader.Recientes;
  */
 public final class OficinaActivity extends Activity {
     private static final int M_BUSCAR = 1, M_NOCHE = 2, M_COMPARTIR = 3, M_INDICE = 4, M_AJUSTAR = 5, M_PAGINA = 6,
-            M_PROTEGER = 7, M_QUITAR_CLAVE = 8;
+            M_PROTEGER = 7, M_QUITAR_CLAVE = 8, M_IMPRIMIR = 9;
     private static final int GUARDAR_PROTEGIDO = 30, GUARDAR_SIN_CLAVE = 31;
 
     // Protección con contraseña (solo Office 2007+ y OpenDocument).
@@ -1483,6 +1484,7 @@ public final class OficinaActivity extends Activity {
         menu.add(0, M_PAGINA, 0, "Ver como página").setCheckable(true).setChecked(comoPagina);
         menu.add(0, M_PROTEGER, 0, "Proteger con contraseña…");
         menu.add(0, M_QUITAR_CLAVE, 0, "Quitar contraseña…");
+        menu.add(0, M_IMPRIMIR, 0, "Imprimir…");
         menu.add(0, M_COMPARTIR, 0, "Compartir");
         return true;
     }
@@ -1494,6 +1496,7 @@ public final class OficinaActivity extends Activity {
                 .setChecked(ajustar);
         menu.findItem(M_PAGINA).setVisible(documento != null && documento.paginaWeb != null).setChecked(comoPagina);
         menu.findItem(M_NOCHE).setChecked(noche);
+        menu.findItem(M_IMPRIMIR).setVisible(original != null || documento != null);
         menu.findItem(M_PROTEGER).setVisible(proteccion == OOXML || proteccion == ODF);
         menu.findItem(M_QUITAR_CLAVE).setVisible(proteccion == OOXML_CIFRADO || proteccion == ODF_CIFRADO);
         return super.onPrepareOptionsMenu(menu);
@@ -1551,6 +1554,9 @@ public final class OficinaActivity extends Activity {
                         .setNegativeButton("Cancelar", null)
                         .show();
                 return true;
+            case M_IMPRIMIR:
+                imprimir();
+                return true;
             case M_COMPARTIR:
                 Intent i = new Intent(Intent.ACTION_SEND)
                         .setType(mime != null ? mime : "*/*")
@@ -1564,6 +1570,50 @@ public final class OficinaActivity extends Activity {
                 return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    // --- Impresión ---
+
+    /**
+     * Imprime el documento completo tal como es, no como se ve: sin modo noche, con todas las
+     * diapositivas aunque se esté en modo presentación y, en libros de varias hojas, preguntando
+     * si se imprime solo la hoja actual o todo el libro.
+     */
+    private void imprimir() {
+        Html.Documento d = original != null ? original : documento;
+        if (d == null) return;
+        int n = d.numHojas();
+        if (n <= 1 || viendoPagina()) {
+            Impresion.html(this, nombre, htmlImpresion(d, false), BASE);
+            return;
+        }
+        int hoja = Math.max(0, Math.min(hojaActual, n - 1));
+        new AlertDialog.Builder(this)
+                .setTitle("Imprimir")
+                .setItems(new String[] {"Hoja actual («" + d.hojas[hoja] + "»)", "Todo el libro (" + n + " hojas)"},
+                        (x, w) -> Impresion.html(this, nombre, htmlImpresion(d, w == 1), BASE))
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
+    private String htmlImpresion(Html.Documento d, boolean todasLasHojas) {
+        // Los textos largos (código, por ejemplo) se ajustan al ancho del papel en vez de cortarse.
+        int ops = Html.OP_AJUSTAR | (viendoPagina() ? Html.OP_COMO_PAGINA : 0);
+        Html.Documento p;
+        if (todasLasHojas) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < d.numHojas(); i++) {
+                sb.append(i == 0 ? "<div>" : "<div class=salto-hoja>")
+                        .append("<h2 class=titulo-hoja>").append(Html.esc(d.hojas[i])).append("</h2>")
+                        .append(d.cuerposHojas[i]).append("</div>");
+            }
+            p = new Html.Documento(sb.toString(), d.css + Impresion.CSS, d.viewport, d.clase);
+        } else {
+            p = new Html.Documento(d.cuerpo, d.css + Impresion.CSS, d.viewport, d.clase, d.hojas, d.cuerposHojas);
+        }
+        p.cssAjustar = d.cssAjustar;
+        p.paginaWeb = d.paginaWeb;
+        return Html.pagina(p, false, hojaActual, ops);
     }
 
     // --- Búsqueda ---

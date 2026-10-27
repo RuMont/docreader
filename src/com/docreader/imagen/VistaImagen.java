@@ -125,6 +125,9 @@ final class VistaImagen extends View {
         return d.getIntrinsicHeight();
     }
 
+    /** Cuartos de vuelta aplicados (0–3, en sentido horario). */
+    int giro() { return encuadre.giro(); }
+
     void girar() {
         detener();
         encuadre.girar();

@@ -65,6 +65,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.docreader.Impresion;
 import com.docreader.Recientes;
 
 /**
@@ -75,7 +76,7 @@ import com.docreader.Recientes;
  * Recibe el libro como {@code getIntent().getData()} (normalmente una URI content://).
  */
 public final class EpubActivity extends Activity {
-    private static final int M_INDICE = 1, M_BUSCAR = 2, M_LETRA = 3, M_NOCHE = 4, M_COMPARTIR = 5;
+    private static final int M_INDICE = 1, M_BUSCAR = 2, M_LETRA = 3, M_NOCHE = 4, M_COMPARTIR = 5, M_IMPRIMIR = 6;
     public static final String MIME = "application/epub+zip";
 
     /** Capítulos preparados que se guardan en memoria, y su tamaño máximo total en caracteres. */
@@ -524,6 +525,31 @@ public final class EpubActivity extends Activity {
         });
     }
 
+    /** Imprime el capítulo actual con los colores claros, aunque se esté leyendo en modo noche. */
+    private void imprimirCapitulo() {
+        if (libro == null || hilo == null || hilo.isShutdown() || actual < 0) return;
+        final int cap = actual;
+        Toast.makeText(this, "Preparando la impresión…", Toast.LENGTH_SHORT).show();
+        hilo.execute(() -> {
+            String html;
+            String base;
+            try {
+                Capitulos.Pagina pg = obtener(cap);
+                html = pg.html(false);
+                base = Rutas.url(pg.ruta, null);
+            } catch (Exception | OutOfMemoryError e) {
+                html = null;
+                base = null;
+            }
+            final String h = html, b = base;
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (h == null) Toast.makeText(this, "No se pudo preparar el capítulo", Toast.LENGTH_SHORT).show();
+                else Impresion.html(this, nombre, h, b);
+            });
+        });
+    }
+
     /** Capítulo preparado, de la caché o recién hecho (en el hilo del zip). */
     private Capitulos.Pagina obtener(int i) {
         synchronized (cache) {
@@ -834,6 +860,7 @@ public final class EpubActivity extends Activity {
                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
         menu.add(0, M_LETRA, 0, "Tamaño de letra");
         menu.add(0, M_NOCHE, 0, "Modo noche").setCheckable(true).setChecked(noche);
+        menu.add(0, M_IMPRIMIR, 0, "Imprimir capítulo…");
         menu.add(0, M_COMPARTIR, 0, "Compartir");
         return true;
     }
@@ -858,6 +885,9 @@ public final class EpubActivity extends Activity {
                 Recientes.setNoche(this, noche);
                 if (web != null) web.setBackgroundColor(colorFondo());
                 recargar();
+                return true;
+            case M_IMPRIMIR:
+                imprimirCapitulo();
                 return true;
             case M_COMPARTIR:
                 Intent i = new Intent(Intent.ACTION_SEND)

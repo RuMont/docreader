@@ -33,6 +33,7 @@ import android.widget.FrameLayout;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
+import com.docreader.Impresion;
 import com.docreader.Recientes;
 
 import java.io.FileNotFoundException;
@@ -50,7 +51,7 @@ import java.util.Set;
  * EXIF), reduce las imágenes enormes y anima GIF/WebP/AVIF animados.
  */
 public final class ImagenActivity extends Activity implements VistaImagen.Oyente {
-    private static final int M_GIRAR = 1, M_AJUSTAR = 2, M_INFO = 3, M_COMPARTIR = 4, M_ABRIR_CON = 5;
+    private static final int M_GIRAR = 1, M_AJUSTAR = 2, M_INFO = 3, M_COMPARTIR = 4, M_ABRIR_CON = 5, M_IMPRIMIR = 6;
 
     // Límites del mapa de bits decodificado (4 bytes por píxel → ~64 MB).
     private static final int LADO_MAX = 4096;
@@ -282,6 +283,7 @@ public final class ImagenActivity extends Activity implements VistaImagen.Oyente
                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
         menu.add(0, M_AJUSTAR, 0, "Ajustar a la pantalla");
         menu.add(0, M_INFO, 0, "Información");
+        menu.add(0, M_IMPRIMIR, 0, "Imprimir…");
         menu.add(0, M_COMPARTIR, 0, "Compartir");
         menu.add(0, M_ABRIR_CON, 0, "Abrir con…");
         return true;
@@ -292,6 +294,7 @@ public final class ImagenActivity extends Activity implements VistaImagen.Oyente
         menu.findItem(M_GIRAR).setEnabled(lista);
         menu.findItem(M_AJUSTAR).setEnabled(lista);
         menu.findItem(M_INFO).setEnabled(lista);
+        menu.findItem(M_IMPRIMIR).setEnabled(lista);
         return true;
     }
 
@@ -305,6 +308,9 @@ public final class ImagenActivity extends Activity implements VistaImagen.Oyente
                 return true;
             case M_INFO:
                 informacion();
+                return true;
+            case M_IMPRIMIR:
+                imprimir();
                 return true;
             case M_COMPARTIR:
                 Intent i = new Intent(Intent.ACTION_SEND)
@@ -324,6 +330,44 @@ public final class ImagenActivity extends Activity implements VistaImagen.Oyente
                 return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    /**
+     * Imprime la imagen con el giro aplicado. Se decodifica de nuevo en memoria normal (la que se
+     * muestra está en memoria gráfica, que no se puede dibujar en el PDF de impresión).
+     */
+    private void imprimir() {
+        ContentResolver cr = getContentResolver();
+        Uri u = uri;
+        int giro = vista.giro();
+        Toast.makeText(this, "Preparando la impresión…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            Bitmap b = null;
+            try {
+                b = ImageDecoder.decodeBitmap(ImageDecoder.createSource(cr, u), (dec, info, s) -> {
+                    Size t = info.getSize();
+                    int[] destino = Encuadre.tamanoDecodificado(t.getWidth(), t.getHeight(), 4000, 16_000_000);
+                    if (destino[0] != t.getWidth() || destino[1] != t.getHeight()) dec.setTargetSize(destino[0], destino[1]);
+                    dec.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
+                    dec.setOnPartialImageListener(e -> true);
+                });
+                if (giro != 0) {
+                    android.graphics.Matrix m = new android.graphics.Matrix();
+                    m.postRotate(90 * giro);
+                    Bitmap g = Bitmap.createBitmap(b, 0, 0, b.getWidth(), b.getHeight(), m, true);
+                    if (g != b) b.recycle();
+                    b = g;
+                }
+            } catch (Exception | OutOfMemoryError e) {
+                b = null;
+            }
+            Bitmap fin = b;
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (fin == null) Toast.makeText(this, "No se pudo preparar la imagen para imprimir", Toast.LENGTH_SHORT).show();
+                else Impresion.imagen(this, nombre, fin);
+            });
+        }, "ImprimirImagen").start();
     }
 
     private String mimeImagen() {

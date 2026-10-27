@@ -63,7 +63,7 @@ import java.util.List;
 public final class LectorActivity extends Activity implements VistaPdf.Oyente {
     private static final int M_BUSCAR = 1, M_IR = 2, M_NOCHE = 3, M_COMPARTIR = 4,
             M_ANOTACIONES = 5, M_OCR = 6, M_FIRMAR = 7,
-            M_DIVIDIR = 8, M_FUSIONAR = 9, M_IMAGENES = 10, M_DOCX = 11, M_PROTEGER = 12, M_QUITAR_CLAVE = 13;
+            M_DIVIDIR = 8, M_FUSIONAR = 9, M_IMAGENES = 10, M_DOCX = 11, M_PROTEGER = 12, M_QUITAR_CLAVE = 13, M_IMPRIMIR = 14;
     private static final int PEDIR_P12 = 20, GUARDAR_FIRMADO = 21, CREAR_FIRMA = 22;
     private static final int S_COPIAR = 1, S_RESALTAR = 2, S_SUBRAYAR = 3, S_NOTA = 4,
             S_COMPARTIR = 5, S_BUSCAR = 6;
@@ -364,6 +364,7 @@ public final class LectorActivity extends Activity implements VistaPdf.Oyente {
         else h.add(0, M_QUITAR_CLAVE, 0, "Quitar contraseña…");
         menu.add(0, M_OCR, 0, "Reconocer texto (OCR)");
         menu.add(0, M_NOCHE, 0, "Modo noche").setCheckable(true).setChecked(noche);
+        menu.add(0, M_IMPRIMIR, 0, "Imprimir…");
         menu.add(0, M_COMPARTIR, 0, "Compartir");
         return true;
     }
@@ -401,6 +402,9 @@ public final class LectorActivity extends Activity implements VistaPdf.Oyente {
                 return true;
             case M_QUITAR_CLAVE:
                 herramientas().quitarClave();
+                return true;
+            case M_IMPRIMIR:
+                herramientas().imprimir();
                 return true;
             case M_OCR:
                 reconocerTodo();

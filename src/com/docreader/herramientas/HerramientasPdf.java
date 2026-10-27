@@ -368,6 +368,43 @@ public final class HerramientasPdf {
         }.iniciar();
     }
 
+    // --- Imprimir ---
+
+    /**
+     * Manda el PDF al sistema de impresión. Si tiene contraseña, el servicio de impresión no
+     * podría abrirlo: se imprime una copia temporal descifrada, salvo que el autor lo prohíba.
+     */
+    public void imprimir() {
+        if (doc.clave() == null) {
+            com.docreader.Impresion.pdf(a, doc.nombre(), doc.uri(), doc.paginas());
+            return;
+        }
+        File[] copia = new File[1];
+        boolean[] prohibido = new boolean[1];
+        new Tarea(a, "Preparando la impresión") {
+            @Override void trabajo() throws Exception {
+                Tarea.iniciarPdfbox(a);
+                File f = Tarea.copiar(a, doc.uri(), "herramienta.pdf");
+                File destino = new File(a.getCacheDir(), "impresion.pdf");
+                try (com.tom_roush.pdfbox.pdmodel.PDDocument d = OperacionesPdf.cargar(f, doc.clave())) {
+                    if (!d.getCurrentAccessPermission().canPrint()) {
+                        prohibido[0] = true;
+                        return;
+                    }
+                    d.setAllSecurityToBeRemoved(true);
+                    d.save(destino);
+                    copia[0] = destino;
+                } finally {
+                    f.delete();
+                }
+            }
+            @Override void alTerminar() {
+                if (prohibido[0]) Tarea.mensaje(a, "El autor de este PDF no permite imprimirlo.");
+                else if (copia[0] != null) com.docreader.Impresion.pdf(a, doc.nombre(), copia[0], doc.paginas(), true);
+            }
+        }.iniciar();
+    }
+
     // --- Fusionar ---
 
     public void fusionar() {
