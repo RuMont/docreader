@@ -63,12 +63,16 @@ import com.docreader.Recientes;
  */
 public final class OficinaActivity extends Activity {
     private static final int M_BUSCAR = 1, M_NOCHE = 2, M_COMPARTIR = 3, M_INDICE = 4, M_AJUSTAR = 5, M_PAGINA = 6,
-            M_PROTEGER = 7, M_QUITAR_CLAVE = 8, M_IMPRIMIR = 9;
+            M_PROTEGER = 7, M_QUITAR_CLAVE = 8, M_IMPRIMIR = 9, M_MACROS = 10;
+    /** Abre la vista del código de las macros en vez del documento (con su contraseña, si la tiene). */
+    static final String EXTRA_MACROS = "com.docreader.oficina.MACROS", EXTRA_CLAVE = "com.docreader.oficina.CLAVE";
     private static final int GUARDAR_PROTEGIDO = 30, GUARDAR_SIN_CLAVE = 31;
 
     // Protección con contraseña (solo Office 2007+ y OpenDocument).
     private static final int SIN_PROTECCION = 0, OOXML = 1, OOXML_CIFRADO = 2, ODF = 3, ODF_CIFRADO = 4;
     private int proteccion = SIN_PROTECCION;
+    private boolean modoMacros, hayMacros, avisoCerrado;
+    private View avisoMacros;
     private String claveDoc, claveNueva; // con la que se abrió / la elegida para proteger
 
     /**
@@ -246,12 +250,13 @@ public final class OficinaActivity extends Activity {
         ajustar = preferencias().getBoolean("ajustar_lineas", false);
         if (b != null) comoPagina = b.getBoolean("como_pagina", false);
         nombre = nombre(uri);
+        modoMacros = getIntent().getBooleanExtra(EXTRA_MACROS, false);
         try {
             mime = getContentResolver().getType(uri);
         } catch (RuntimeException e) {
             mime = null;
         }
-        setTitle(nombre);
+        setTitle(modoMacros ? "Macros · " + nombre : nombre);
         try {
             construirInterfaz();
         } catch (RuntimeException e) {
@@ -267,12 +272,12 @@ public final class OficinaActivity extends Activity {
                 trasMedir = () -> entrarPresentacion(diapo);
             } else if (documento.numHojas() > 0) {
                 montarPestanas();
-                hojaActual = Recientes.pagina(this, uri);
+                hojaActual = modoMacros ? 0 : Recientes.pagina(this, uri);
                 marcarPestana();
             }
             mostrar();
         } else {
-            abrir(null);
+            abrir(modoMacros ? getIntent().getStringExtra(EXTRA_CLAVE) : null);
         }
     }
 
@@ -326,6 +331,31 @@ public final class OficinaActivity extends Activity {
         barraBusqueda.addView(botonPlano("▼", v -> saltar(true)));
         barraBusqueda.addView(botonPlano("✕", v -> cerrarBusqueda()));
         raiz.addView(barraBusqueda, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // Aviso de macros (oculto si el documento no las tiene).
+        LinearLayout aviso = new LinearLayout(this);
+        aviso.setGravity(Gravity.CENTER_VERTICAL);
+        aviso.setBackgroundColor(0xFFFFF4CE);
+        aviso.setPadding(dp(12), dp(2), 0, dp(2));
+        aviso.setVisibility(View.GONE);
+        TextView textoAviso = new TextView(this);
+        textoAviso.setText("Este documento contiene macros. DocReader no las ejecuta.");
+        textoAviso.setTextColor(0xFF5C4400);
+        textoAviso.setTextSize(13);
+        aviso.addView(textoAviso, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Button verCodigo = botonPlano("Ver código", v -> verMacros());
+        verCodigo.setTextColor(0xFF5C4400);
+        aviso.addView(verCodigo);
+        Button cerrarAviso = botonPlano("✕", v -> {
+            avisoCerrado = true;
+            actualizarAvisoMacros();
+        });
+        cerrarAviso.setTextColor(0xFF5C4400);
+        cerrarAviso.setContentDescription("Cerrar aviso");
+        aviso.addView(cerrarAviso);
+        avisoMacros = aviso;
+        raiz.addView(aviso, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         FrameLayout marco = new FrameLayout(this);
@@ -548,10 +578,16 @@ public final class OficinaActivity extends Activity {
             String html = null, fallo;
             FalloClave sinClave = null;
             int prot = SIN_PROTECCION;
+            boolean macros = false;
             try {
                 byte[] datos = leer();
-                doc = convertir(datos, n, m, clave);
-                prot = proteccion(datos);
+                if (modoMacros) {
+                    doc = Macros.documento(Macros.extraer(datos, clave));
+                } else {
+                    doc = convertir(datos, n, m, clave);
+                    prot = proteccion(datos);
+                    macros = Macros.hay(datos);
+                }
                 html = Html.pagina(doc, oscuro, 0, ops);
                 fallo = null;
             } catch (FalloClave e) {
@@ -572,6 +608,7 @@ public final class OficinaActivity extends Activity {
             final String h = html, f = fallo;
             final FalloClave fc = sinClave;
             final int pr = prot;
+            final boolean hm = macros;
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed() || web == null) return;
                 cargando.setVisibility(View.GONE);
@@ -586,8 +623,10 @@ public final class OficinaActivity extends Activity {
                 documento = original = d;
                 proteccion = pr;
                 claveDoc = clave;
-                int recordada = Recientes.pagina(this, uri);
-                Recientes.registrar(this, uri, nombre, 0);
+                hayMacros = hm;
+                actualizarAvisoMacros();
+                int recordada = modoMacros ? 0 : Recientes.pagina(this, uri);
+                if (!modoMacros) Recientes.registrar(this, uri, nombre, 0);
                 if (esPresentacion(d) && horizontal()) {
                     if (web.getWidth() > 0) entrarPresentacion(recordada);
                     else trasMedir = () -> entrarPresentacion(recordada);
@@ -816,6 +855,10 @@ public final class OficinaActivity extends Activity {
      * barra de diapositivas pasa a superponerse sobre la diapositiva (abajo) en vez de quitarle sitio.
      */
     private void pantallaCompleta(boolean activar) {
+        if (avisoMacros != null) {
+            if (activar) avisoMacros.setVisibility(View.GONE);
+            else avisoMacros.post(this::actualizarAvisoMacros); // ya fuera del modo presentación
+        }
         android.app.ActionBar ab = getActionBar();
         android.view.WindowInsetsController ctl =
                 android.os.Build.VERSION.SDK_INT >= 30 ? getWindow().getInsetsController() : null;
@@ -1209,7 +1252,7 @@ public final class OficinaActivity extends Activity {
         i = Math.max(0, Math.min(i, documento.numHojas() - 1));
         boolean otra = i != hojaActual;
         hojaActual = i;
-        Recientes.guardarPagina(this, uri, i);
+        if (!modoMacros) Recientes.guardarPagina(this, uri, i);
         marcarPestana();
         if (barraBusqueda.getVisibility() == View.VISIBLE) {
             web.clearMatches();
@@ -1484,6 +1527,7 @@ public final class OficinaActivity extends Activity {
         menu.add(0, M_PAGINA, 0, "Ver como página").setCheckable(true).setChecked(comoPagina);
         menu.add(0, M_PROTEGER, 0, "Proteger con contraseña…");
         menu.add(0, M_QUITAR_CLAVE, 0, "Quitar contraseña…");
+        menu.add(0, M_MACROS, 0, "Ver código de las macros");
         menu.add(0, M_IMPRIMIR, 0, "Imprimir…");
         menu.add(0, M_COMPARTIR, 0, "Compartir");
         return true;
@@ -1497,6 +1541,7 @@ public final class OficinaActivity extends Activity {
         menu.findItem(M_PAGINA).setVisible(documento != null && documento.paginaWeb != null).setChecked(comoPagina);
         menu.findItem(M_NOCHE).setChecked(noche);
         menu.findItem(M_IMPRIMIR).setVisible(original != null || documento != null);
+        menu.findItem(M_MACROS).setVisible(hayMacros && !modoMacros);
         menu.findItem(M_PROTEGER).setVisible(proteccion == OOXML || proteccion == ODF);
         menu.findItem(M_QUITAR_CLAVE).setVisible(proteccion == OOXML_CIFRADO || proteccion == ODF_CIFRADO);
         return super.onPrepareOptionsMenu(menu);
@@ -1557,6 +1602,9 @@ public final class OficinaActivity extends Activity {
             case M_IMPRIMIR:
                 imprimir();
                 return true;
+            case M_MACROS:
+                verMacros();
+                return true;
             case M_COMPARTIR:
                 Intent i = new Intent(Intent.ACTION_SEND)
                         .setType(mime != null ? mime : "*/*")
@@ -1570,6 +1618,23 @@ public final class OficinaActivity extends Activity {
                 return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    // --- Macros ---
+
+    /** Muestra el aviso de macros salvo que el usuario lo haya cerrado o se esté en pantalla completa. */
+    private void actualizarAvisoMacros() {
+        if (avisoMacros == null) return;
+        avisoMacros.setVisibility(hayMacros && !modoMacros && !avisoCerrado && !enPresentacion ? View.VISIBLE : View.GONE);
+    }
+
+    /** Abre el código de las macros en otra pantalla del visor (pestañas por módulo, búsqueda…). */
+    private void verMacros() {
+        startActivity(new Intent(this, OficinaActivity.class)
+                .setData(uri)
+                .putExtra(EXTRA_MACROS, true)
+                .putExtra(EXTRA_CLAVE, claveDoc)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION));
     }
 
     // --- Impresión ---

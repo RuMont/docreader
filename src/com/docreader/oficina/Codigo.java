@@ -151,7 +151,7 @@ final class Codigo {
     private static final String[] C_COMENTARIOS = {"//"};
     private static final String[] C_BLOQUES = {"/*", "*/"};
 
-    static final Lenguaje JS, TS, CSS_L, SCSS, LESS, JSON_L, HTML_L, XML_L, SH;
+    static final Lenguaje JS, TS, CSS_L, SCSS, LESS, JSON_L, HTML_L, XML_L, SH, VB;
 
     static {
         String cClaves = "auto break case const continue default do else enum extern for goto if inline "
@@ -486,6 +486,24 @@ final class Codigo {
         ext(ps, "ps1", "psm1", "psd1");
         alias(ps, "ps1", "powershell", "pwsh", "posh");
         mime(ps, "application/x-powershell", "text/x-powershell");
+
+        // Visual Basic: VBA (macros de Office), VBScript, VB.NET y LibreOffice Basic.
+        VB = def("vb", GENERICO, "and as byref byval call case const declare dim do each else elseif end enum "
+                + "erase error event exit explicit false for friend function get global gosub goto if implements in "
+                + "is let like lib loop me mod new next not nothing null on option optional or paramarray preserve "
+                + "private property public raiseevent redim resume return select set static step stop sub then to "
+                + "true type typeof until wend while with withevents xor imports inherits module namespace class "
+                + "try catch finally throw using handles overrides shared readonly",
+                "boolean byte currency date decimal double integer long longlong longptr object single string "
+                + "variant collection range worksheet workbook application");
+        VB.lineas = new String[] {"'", "^rem"};
+        VB.comillas = "\"";
+        VB.sinMayus = true;
+        VB.dobladas = true;
+        VB.sinEscapes = true;
+        ext(VB, "bas", "cls", "frm", "vb", "vbs", "vba", "xba");
+        alias(VB, "vb", "vba", "vbs", "vbscript", "vbnet", "vb.net", "basic", "starbasic");
+        mime(VB, "text/vbscript", "text/x-vb", "application/x-vbscript");
 
         Lenguaje bat = def("bat", GENERICO, "if else for in do goto call exit set setlocal endlocal echo off on "
                 + "not exist defined errorlevel equ neq lss leq gtr geq shift pushd popd cd chdir pause start "
