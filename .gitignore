@@ -1,0 +1,9 @@
+# Salida de compilación
+build/
+
+# Clave de firma del APK: nunca al repositorio
+*.keystore
+*.jks
+
+# Paquetes originales (.aar) y BouncyCastle, solo para pruebas en el ordenador
+terceros/descargas/
