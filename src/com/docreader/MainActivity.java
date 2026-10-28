@@ -311,21 +311,21 @@ public final class MainActivity extends Activity {
     }
 
     @Override public boolean onCreateOptionsMenu(android.view.Menu menu) {
-        menu.add(0, 1, 0, "Unir varios PDF…");
-        menu.add(0, 2, 0, "Borrar recientes…");
+        menu.add(0, 1, 0, "Opciones")
+                .setIcon(new Icono(this, Icono.Tipo.MAS, Estilo.texto(this)))
+                .setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS);
         return true;
     }
 
     @Override public boolean onOptionsItemSelected(android.view.MenuItem item) {
-        if (item.getItemId() == 1) {
-            startActivity(new Intent(this, com.docreader.herramientas.FusionarActivity.class));
-            return true;
-        }
-        if (item.getItemId() == 2) {
-            confirmarBorrado();
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
+        if (item.getItemId() != 1) return super.onOptionsItemSelected(item);
+        MenuPanel.Nivel n = new MenuPanel.Nivel("DocReader")
+                .accion(Icono.Tipo.CARPETA, "Abrir documento…", this::elegir)
+                .accion(Icono.Tipo.UNIR, "Unir varios PDF…", () ->
+                        startActivity(new Intent(this, com.docreader.herramientas.FusionarActivity.class)));
+        if (!recientes.isEmpty()) n.accion(Icono.Tipo.PAPELERA, "Borrar recientes…", this::confirmarBorrado);
+        MenuPanel.mostrar(this, n);
+        return true;
     }
 
     private void quitar(JSONObject o) {

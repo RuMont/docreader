@@ -68,6 +68,9 @@ import java.util.concurrent.Executors;
 import com.docreader.Estilo;
 import com.docreader.Icono;
 import com.docreader.Impresion;
+import com.docreader.Estilo;
+import com.docreader.Icono;
+import com.docreader.MenuPanel;
 import com.docreader.Recientes;
 
 /**
@@ -78,6 +81,7 @@ import com.docreader.Recientes;
  * Recibe el libro como {@code getIntent().getData()} (normalmente una URI content://).
  */
 public final class EpubActivity extends Activity {
+    private static final int M_OPCIONES = 99;
     private static final int M_INDICE = 1, M_BUSCAR = 2, M_LETRA = 3, M_NOCHE = 4, M_COMPARTIR = 5, M_IMPRIMIR = 6;
     public static final String MIME = "application/epub+zip";
 
@@ -855,21 +859,26 @@ public final class EpubActivity extends Activity {
     // --- Menú ---
 
     @Override public boolean onCreateOptionsMenu(Menu menu) {
-        menu.add(0, M_INDICE, 0, "Índice")
-                .setIcon(android.R.drawable.ic_menu_sort_by_size)
-                .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
         menu.add(0, M_BUSCAR, 0, "Buscar")
-                .setIcon(android.R.drawable.ic_menu_search)
-                .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
-        menu.add(0, M_LETRA, 0, "Tamaño de letra");
-        menu.add(0, M_NOCHE, 0, "Modo noche").setCheckable(true).setChecked(noche);
-        menu.add(0, M_IMPRIMIR, 0, "Imprimir capítulo…");
-        menu.add(0, M_COMPARTIR, 0, "Compartir");
+                .setIcon(new Icono(this, Icono.Tipo.BUSCAR, Estilo.texto(this)))
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+        menu.add(0, M_OPCIONES, 0, "Opciones")
+                .setIcon(new Icono(this, Icono.Tipo.MAS, Estilo.texto(this)))
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
         return true;
     }
 
     @Override public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
+        if (item.getItemId() == M_OPCIONES) {
+            panelOpciones();
+            return true;
+        }
+        return accion(item.getItemId()) || super.onOptionsItemSelected(item);
+    }
+
+    /** Ejecuta una opción del menú (desde la barra o desde el panel de opciones). */
+    private boolean accion(int id) {
+        switch (id) {
             case M_INDICE:
                 mostrarIndice();
                 return true;
@@ -884,7 +893,6 @@ public final class EpubActivity extends Activity {
                 return true;
             case M_NOCHE:
                 noche = !noche;
-                item.setChecked(noche);
                 Recientes.setNoche(this, noche);
                 if (web != null) web.setBackgroundColor(colorFondo());
                 recargar();
@@ -904,7 +912,20 @@ public final class EpubActivity extends Activity {
                 }
                 return true;
         }
-        return super.onOptionsItemSelected(item);
+        return false;
+    }
+
+    /** Panel de opciones con submenús (ver MenuPanel). */
+    private void panelOpciones() {
+        MenuPanel.Nivel n = new MenuPanel.Nivel(nombre != null ? nombre : "Libro")
+                .accion(Icono.Tipo.INDICE, "Índice", () -> accion(M_INDICE))
+                .accion(Icono.Tipo.BUSCAR, "Buscar en el capítulo", () -> accion(M_BUSCAR))
+                .submenu(Icono.Tipo.OJO, "Vista", () -> new MenuPanel.Nivel("Vista")
+                        .interruptor(Icono.Tipo.LUNA, "Modo noche", noche, x -> accion(M_NOCHE))
+                        .accion(Icono.Tipo.LETRA, "Tamaño de letra…", () -> accion(M_LETRA)))
+                .accion(Icono.Tipo.IMPRESORA, "Imprimir capítulo…", () -> accion(M_IMPRIMIR))
+                .accion(Icono.Tipo.COMPARTIR, "Compartir", () -> accion(M_COMPARTIR));
+        MenuPanel.mostrar(this, n);
     }
 
     // --- Búsqueda ---

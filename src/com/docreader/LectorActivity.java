@@ -61,6 +61,7 @@ import java.util.Date;
 import java.util.List;
 
 public final class LectorActivity extends Activity implements VistaPdf.Oyente {
+    private static final int M_OPCIONES = 99;
     private static final int M_BUSCAR = 1, M_IR = 2, M_NOCHE = 3, M_COMPARTIR = 4,
             M_ANOTACIONES = 5, M_OCR = 6, M_FIRMAR = 7,
             M_DIVIDIR = 8, M_FUSIONAR = 9, M_IMAGENES = 10, M_DOCX = 11, M_PROTEGER = 12, M_QUITAR_CLAVE = 13, M_IMPRIMIR = 14;
@@ -345,33 +346,28 @@ public final class LectorActivity extends Activity implements VistaPdf.Oyente {
     // --- Menú ---
 
     @Override public boolean onCreateOptionsMenu(Menu menu) {
-        // Hasta que el PDF se abre bien no se ofrece nada específico de PDF (firmar, herramientas…).
-        if (total == 0) {
-            menu.add(0, M_COMPARTIR, 0, "Compartir");
-            return true;
+        if (total > 0) {
+            menu.add(0, M_BUSCAR, 0, "Buscar")
+                    .setIcon(new Icono(this, Icono.Tipo.BUSCAR, Estilo.texto(this)))
+                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
         }
-        menu.add(0, M_BUSCAR, 0, "Buscar")
-                .setIcon(android.R.drawable.ic_menu_search)
-                .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
-        menu.add(0, M_IR, 0, "Ir a página…");
-        menu.add(0, M_ANOTACIONES, 0, "Anotaciones");
-        menu.add(0, M_FIRMAR, 0, "Firmar…");
-        android.view.SubMenu h = menu.addSubMenu("Herramientas PDF");
-        h.add(0, M_DIVIDIR, 0, "Dividir o extraer páginas…");
-        h.add(0, M_FUSIONAR, 0, "Unir con otros PDF…");
-        h.add(0, M_IMAGENES, 0, "Convertir a imágenes…");
-        h.add(0, M_DOCX, 0, "Convertir a Word (.docx)…");
-        if (clavePdf == null) h.add(0, M_PROTEGER, 0, "Proteger con contraseña…");
-        else h.add(0, M_QUITAR_CLAVE, 0, "Quitar contraseña…");
-        menu.add(0, M_OCR, 0, "Reconocer texto (OCR)");
-        menu.add(0, M_NOCHE, 0, "Modo noche").setCheckable(true).setChecked(noche);
-        menu.add(0, M_IMPRIMIR, 0, "Imprimir…");
-        menu.add(0, M_COMPARTIR, 0, "Compartir");
+        menu.add(0, M_OPCIONES, 0, "Opciones")
+                .setIcon(new Icono(this, Icono.Tipo.MAS, Estilo.texto(this)))
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
         return true;
     }
 
     @Override public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
+        if (item.getItemId() == M_OPCIONES) {
+            panelOpciones();
+            return true;
+        }
+        return accion(item.getItemId()) || super.onOptionsItemSelected(item);
+    }
+
+    /** Ejecuta una opción del menú (desde la barra o desde el panel de opciones). */
+    private boolean accion(int id) {
+        switch (id) {
             case M_BUSCAR:
                 barraBusqueda.setVisibility(View.VISIBLE);
                 campo.requestFocus();
@@ -412,7 +408,6 @@ public final class LectorActivity extends Activity implements VistaPdf.Oyente {
                 return true;
             case M_NOCHE:
                 noche = !noche;
-                item.setChecked(noche);
                 vista.setNoche(noche);
                 Recientes.setNoche(this, noche);
                 return true;
@@ -424,7 +419,41 @@ public final class LectorActivity extends Activity implements VistaPdf.Oyente {
                 startActivity(Intent.createChooser(i, "Compartir PDF"));
                 return true;
         }
-        return super.onOptionsItemSelected(item);
+        return false;
+    }
+
+    /** Panel de opciones con submenús (ver MenuPanel). */
+    private void panelOpciones() {
+        MenuPanel.Nivel n = new MenuPanel.Nivel(getTitle().toString());
+        if (total == 0) { // el PDF no se pudo abrir
+            n.accion(Icono.Tipo.COMPARTIR, "Compartir", () -> accion(M_COMPARTIR));
+            MenuPanel.mostrar(this, n);
+            return;
+        }
+        n.accion(Icono.Tipo.BUSCAR, "Buscar", () -> accion(M_BUSCAR))
+                .accion(Icono.Tipo.IR_PAGINA, "Ir a página…", () -> accion(M_IR))
+                .accion(Icono.Tipo.LAPIZ, "Anotaciones", () -> accion(M_ANOTACIONES))
+                .accion(Icono.Tipo.FIRMA, "Firmar…", () -> accion(M_FIRMAR))
+                .submenu(Icono.Tipo.HERRAMIENTAS, "Herramientas PDF", () -> new MenuPanel.Nivel("Herramientas PDF")
+                        .accion(Icono.Tipo.TIJERAS, "Dividir o extraer páginas…", () -> accion(M_DIVIDIR))
+                        .accion(Icono.Tipo.UNIR, "Unir con otros PDF…", () -> accion(M_FUSIONAR))
+                        .submenu(Icono.Tipo.CONVERTIR, "Convertir", () -> new MenuPanel.Nivel("Convertir")
+                                .accion(Icono.Tipo.IMAGEN, "A imágenes…", () -> accion(M_IMAGENES))
+                                .detalle("JPG o PNG en la galería")
+                                .accion(Icono.Tipo.DOCUMENTO, "A Word (.docx)…", () -> accion(M_DOCX)))
+                        .submenu(Icono.Tipo.CANDADO, "Seguridad", () -> clavePdf == null
+                                ? new MenuPanel.Nivel("Seguridad")
+                                        .accion(Icono.Tipo.CANDADO, "Proteger con contraseña…", () -> accion(M_PROTEGER))
+                                        .detalle("Guarda una copia cifrada")
+                                : new MenuPanel.Nivel("Seguridad")
+                                        .accion(Icono.Tipo.CANDADO, "Quitar contraseña…", () -> accion(M_QUITAR_CLAVE))
+                                        .detalle("Guarda una copia sin contraseña")))
+                .accion(Icono.Tipo.OCR, "Reconocer texto (OCR)", () -> accion(M_OCR))
+                .submenu(Icono.Tipo.OJO, "Vista", () -> new MenuPanel.Nivel("Vista")
+                        .interruptor(Icono.Tipo.LUNA, "Modo noche", noche, v -> accion(M_NOCHE)))
+                .accion(Icono.Tipo.IMPRESORA, "Imprimir…", () -> accion(M_IMPRIMIR))
+                .accion(Icono.Tipo.COMPARTIR, "Compartir", () -> accion(M_COMPARTIR));
+        MenuPanel.mostrar(this, n);
     }
 
     private void dialogoIrA() {

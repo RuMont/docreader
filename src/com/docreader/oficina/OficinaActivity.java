@@ -55,6 +55,9 @@ import java.util.Set;
 import com.docreader.Estilo;
 import com.docreader.Icono;
 import com.docreader.Impresion;
+import com.docreader.Estilo;
+import com.docreader.Icono;
+import com.docreader.MenuPanel;
 import com.docreader.Recientes;
 
 /**
@@ -64,6 +67,7 @@ import com.docreader.Recientes;
  * sin JavaScript y sin acceso a archivos.
  */
 public final class OficinaActivity extends Activity {
+    private static final int M_OPCIONES = 99;
     private static final int M_BUSCAR = 1, M_NOCHE = 2, M_COMPARTIR = 3, M_INDICE = 4, M_AJUSTAR = 5, M_PAGINA = 6,
             M_PROTEGER = 7, M_QUITAR_CLAVE = 8, M_IMPRIMIR = 9, M_MACROS = 10;
     /** Abre la vista del código de las macros en vez del documento (con su contraseña, si la tiene). */
@@ -1517,39 +1521,26 @@ public final class OficinaActivity extends Activity {
     // --- Menú ---
 
     @Override public boolean onCreateOptionsMenu(Menu menu) {
-        menu.add(0, M_INDICE, 0, "Índice")
-                .setIcon(android.R.drawable.ic_menu_sort_by_size)
-                .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
         menu.add(0, M_BUSCAR, 0, "Buscar")
-                .setIcon(android.R.drawable.ic_menu_search)
-                .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
-        menu.add(0, M_NOCHE, 0, "Modo noche").setCheckable(true).setChecked(noche);
-        menu.add(0, M_AJUSTAR, 0, "Ajustar líneas").setCheckable(true).setChecked(ajustar);
-        menu.add(0, M_PAGINA, 0, "Ver como página").setCheckable(true).setChecked(comoPagina);
-        menu.add(0, M_PROTEGER, 0, "Proteger con contraseña…");
-        menu.add(0, M_QUITAR_CLAVE, 0, "Quitar contraseña…");
-        menu.add(0, M_MACROS, 0, "Ver código de las macros");
-        menu.add(0, M_IMPRIMIR, 0, "Imprimir…");
-        menu.add(0, M_COMPARTIR, 0, "Compartir");
+                .setIcon(new Icono(this, Icono.Tipo.BUSCAR, Estilo.texto(this)))
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+        menu.add(0, M_OPCIONES, 0, "Opciones")
+                .setIcon(new Icono(this, Icono.Tipo.MAS, Estilo.texto(this)))
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
         return true;
     }
 
-    @Override public boolean onPrepareOptionsMenu(Menu menu) {
-        boolean pagina = viendoPagina();
-        menu.findItem(M_INDICE).setVisible(documento != null && !documento.indice.isEmpty() && !pagina);
-        menu.findItem(M_AJUSTAR).setVisible(documento != null && documento.cssAjustar != null && !pagina)
-                .setChecked(ajustar);
-        menu.findItem(M_PAGINA).setVisible(documento != null && documento.paginaWeb != null).setChecked(comoPagina);
-        menu.findItem(M_NOCHE).setChecked(noche);
-        menu.findItem(M_IMPRIMIR).setVisible(original != null || documento != null);
-        menu.findItem(M_MACROS).setVisible(hayMacros && !modoMacros);
-        menu.findItem(M_PROTEGER).setVisible(proteccion == OOXML || proteccion == ODF);
-        menu.findItem(M_QUITAR_CLAVE).setVisible(proteccion == OOXML_CIFRADO || proteccion == ODF_CIFRADO);
-        return super.onPrepareOptionsMenu(menu);
+    @Override public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == M_OPCIONES) {
+            panelOpciones();
+            return true;
+        }
+        return accion(item.getItemId()) || super.onOptionsItemSelected(item);
     }
 
-    @Override public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
+    /** Ejecuta una opción del menú (desde la barra o desde el panel de opciones). */
+    private boolean accion(int id) {
+        switch (id) {
             case M_BUSCAR:
                 if (documento == null) return true;
                 if (enPresentacion) {
@@ -1562,7 +1553,6 @@ public final class OficinaActivity extends Activity {
                 return true;
             case M_NOCHE:
                 noche = !noche;
-                item.setChecked(noche);
                 Recientes.setNoche(this, noche);
                 mostrar();
                 return true;
@@ -1571,13 +1561,11 @@ public final class OficinaActivity extends Activity {
                 return true;
             case M_AJUSTAR:
                 ajustar = !ajustar;
-                item.setChecked(ajustar);
                 preferencias().edit().putBoolean("ajustar_lineas", ajustar).apply();
                 mostrar();
                 return true;
             case M_PAGINA:
                 comoPagina = !comoPagina;
-                item.setChecked(comoPagina);
                 if (barraBusqueda.getVisibility() == View.VISIBLE) cerrarBusqueda();
                 if (documento != null && web != null) {
                     volverX = volverY = 0;
@@ -1618,7 +1606,42 @@ public final class OficinaActivity extends Activity {
                 }
                 return true;
         }
-        return super.onOptionsItemSelected(item);
+        return false;
+    }
+
+    /** Panel de opciones con submenús (ver MenuPanel). */
+    private void panelOpciones() {
+        boolean pagina = viendoPagina();
+        MenuPanel.Nivel n = new MenuPanel.Nivel(nombre != null ? nombre : "Documento");
+        if (documento != null && !documento.indice.isEmpty() && !pagina) {
+            n.accion(Icono.Tipo.INDICE, "Índice", () -> accion(M_INDICE));
+        }
+        n.accion(Icono.Tipo.BUSCAR, "Buscar", () -> accion(M_BUSCAR));
+        n.submenu(Icono.Tipo.OJO, "Vista", () -> {
+            MenuPanel.Nivel v = new MenuPanel.Nivel("Vista")
+                    .interruptor(Icono.Tipo.LUNA, "Modo noche", noche, x -> accion(M_NOCHE));
+            if (documento != null && documento.cssAjustar != null && !viendoPagina()) {
+                v.interruptor(Icono.Tipo.AJUSTAR, "Ajustar líneas", ajustar, x -> accion(M_AJUSTAR));
+            }
+            if (documento != null && documento.paginaWeb != null) {
+                v.interruptor(Icono.Tipo.DOCUMENTO, "Ver como página", comoPagina, x -> accion(M_PAGINA))
+                        .detalle("Muestra el HTML o SVG con su diseño");
+            }
+            return v;
+        });
+        if (hayMacros && !modoMacros) n.accion(Icono.Tipo.CODIGO, "Ver código de las macros", () -> accion(M_MACROS));
+        if (proteccion == OOXML || proteccion == ODF) {
+            n.submenu(Icono.Tipo.CANDADO, "Seguridad", () -> new MenuPanel.Nivel("Seguridad")
+                    .accion(Icono.Tipo.CANDADO, "Proteger con contraseña…", () -> accion(M_PROTEGER))
+                    .detalle("Guarda una copia cifrada"));
+        } else if (proteccion == OOXML_CIFRADO || proteccion == ODF_CIFRADO) {
+            n.submenu(Icono.Tipo.CANDADO, "Seguridad", () -> new MenuPanel.Nivel("Seguridad")
+                    .accion(Icono.Tipo.CANDADO, "Quitar contraseña…", () -> accion(M_QUITAR_CLAVE))
+                    .detalle("Guarda una copia sin contraseña"));
+        }
+        if (original != null || documento != null) n.accion(Icono.Tipo.IMPRESORA, "Imprimir…", () -> accion(M_IMPRIMIR));
+        n.accion(Icono.Tipo.COMPARTIR, "Compartir", () -> accion(M_COMPARTIR));
+        MenuPanel.mostrar(this, n);
     }
 
     // --- Macros ---

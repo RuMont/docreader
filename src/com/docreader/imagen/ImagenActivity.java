@@ -34,6 +34,9 @@ import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import com.docreader.Impresion;
+import com.docreader.Estilo;
+import com.docreader.Icono;
+import com.docreader.MenuPanel;
 import com.docreader.Recientes;
 
 import java.io.FileNotFoundException;
@@ -51,6 +54,7 @@ import java.util.Set;
  * EXIF), reduce las imágenes enormes y anima GIF/WebP/AVIF animados.
  */
 public final class ImagenActivity extends Activity implements VistaImagen.Oyente {
+    private static final int M_OPCIONES = 99;
     private static final int M_GIRAR = 1, M_AJUSTAR = 2, M_INFO = 3, M_COMPARTIR = 4, M_ABRIR_CON = 5, M_IMPRIMIR = 6;
 
     // Límites del mapa de bits decodificado (4 bytes por píxel → ~64 MB).
@@ -279,27 +283,25 @@ public final class ImagenActivity extends Activity implements VistaImagen.Oyente
 
     @Override public boolean onCreateOptionsMenu(Menu menu) {
         menu.add(0, M_GIRAR, 0, "Girar")
-                .setIcon(android.R.drawable.ic_menu_rotate)
-                .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
-        menu.add(0, M_AJUSTAR, 0, "Ajustar a la pantalla");
-        menu.add(0, M_INFO, 0, "Información");
-        menu.add(0, M_IMPRIMIR, 0, "Imprimir…");
-        menu.add(0, M_COMPARTIR, 0, "Compartir");
-        menu.add(0, M_ABRIR_CON, 0, "Abrir con…");
-        return true;
-    }
-
-    @Override public boolean onPrepareOptionsMenu(Menu menu) {
-        boolean lista = actual != null;
-        menu.findItem(M_GIRAR).setEnabled(lista);
-        menu.findItem(M_AJUSTAR).setEnabled(lista);
-        menu.findItem(M_INFO).setEnabled(lista);
-        menu.findItem(M_IMPRIMIR).setEnabled(lista);
+                .setIcon(new Icono(this, Icono.Tipo.GIRAR, Estilo.texto(this)))
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+        menu.add(0, M_OPCIONES, 0, "Opciones")
+                .setIcon(new Icono(this, Icono.Tipo.MAS, Estilo.texto(this)))
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
         return true;
     }
 
     @Override public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
+        if (item.getItemId() == M_OPCIONES) {
+            panelOpciones();
+            return true;
+        }
+        return accion(item.getItemId()) || super.onOptionsItemSelected(item);
+    }
+
+    /** Ejecuta una opción del menú (desde la barra o desde el panel de opciones). */
+    private boolean accion(int id) {
+        switch (id) {
             case M_GIRAR:
                 vista.girar();
                 return true;
@@ -329,7 +331,19 @@ public final class ImagenActivity extends Activity implements VistaImagen.Oyente
                 lanzar(selector);
                 return true;
         }
-        return super.onOptionsItemSelected(item);
+        return false;
+    }
+
+    /** Panel de opciones (ver MenuPanel). */
+    private void panelOpciones() {
+        boolean lista = actual != null;
+        MenuPanel.Nivel n = new MenuPanel.Nivel(nombre != null ? nombre : "Imagen")
+                .accion(Icono.Tipo.AJUSTAR, "Ajustar a la pantalla", () -> accion(M_AJUSTAR)).activo(lista)
+                .accion(Icono.Tipo.INFO, "Información", () -> accion(M_INFO)).activo(lista)
+                .accion(Icono.Tipo.IMPRESORA, "Imprimir…", () -> accion(M_IMPRIMIR)).activo(lista)
+                .accion(Icono.Tipo.COMPARTIR, "Compartir", () -> accion(M_COMPARTIR))
+                .accion(Icono.Tipo.ABRIR_CON, "Abrir con…", () -> accion(M_ABRIR_CON));
+        MenuPanel.mostrar(this, n);
     }
 
     /**
