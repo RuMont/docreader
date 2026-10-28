@@ -97,18 +97,35 @@ public final class MenuPanel {
 
     private static final int DURACION = 260;
 
+    private static final int DURACION_HOJA = 240;
+
     private final Activity a;
     private final Dialog dialogo;
     private final FrameLayout marco;
+    private final LinearLayout hoja;
+    private final View velo;
     private final Deque<View> pila = new ArrayDeque<>();
-    private boolean animando;
+    private boolean animando, cerrando;
 
+    /**
+     * La ventana ocupa toda la pantalla (transparente) y el velo oscuro y la hoja se animan dentro:
+     * así, al cambiar de nivel solo se recoloca la hoja y no se redimensiona la ventana en cada
+     * fotograma, que es lo que hacía que la animación fuera a saltos.
+     */
     private MenuPanel(Activity a) {
         this.a = a;
         dialogo = new Dialog(a);
         dialogo.requestWindowFeature(Window.FEATURE_NO_TITLE);
 
-        LinearLayout hoja = new LinearLayout(a);
+        FrameLayout raiz = new FrameLayout(a);
+        velo = new View(a);
+        velo.setBackgroundColor(0x5C000000);
+        velo.setAlpha(0f);
+        velo.setOnClickListener(v -> cerrar(null));
+        raiz.addView(velo, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+
+        hoja = new LinearLayout(a);
         hoja.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable fondo = new GradientDrawable();
         fondo.setColor(Estilo.superficie(a));
@@ -117,6 +134,7 @@ public final class MenuPanel {
         hoja.setBackground(fondo);
         hoja.setPadding(0, dp(8), 0, dp(10));
         hoja.setClipChildren(true);
+        hoja.setClickable(true); // los toques en la hoja no llegan al velo
 
         View asa = new View(a);
         asa.setBackground(Estilo.redondo(Estilo.linea(a), dp(2)));
@@ -129,26 +147,43 @@ public final class MenuPanel {
         marco.setClipChildren(true);
         hoja.addView(marco, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
+        raiz.addView(hoja, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
 
-        dialogo.setContentView(hoja);
+        dialogo.setContentView(raiz);
         Window w = dialogo.getWindow();
         if (w != null) {
             w.setBackgroundDrawable(new ColorDrawable(0));
-            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            w.setGravity(Gravity.BOTTOM);
-            w.setWindowAnimations(android.R.style.Animation_InputMethod); // sube desde abajo
-            w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            w.setDimAmount(0.35f);
-            w.setNavigationBarColor(Estilo.superficie(a));
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            w.setWindowAnimations(0);
+            w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                // De borde a borde: el velo cubre también las barras del sistema y la hoja deja
+                // hueco abajo para la barra de navegación.
+                w.setDecorFitsSystemWindows(false);
+                w.setStatusBarColor(0);
+                w.setNavigationBarColor(0);
+                android.view.WindowInsetsController c = w.getInsetsController();
+                if (c != null && !Estilo.oscuro(a)) {
+                    c.setSystemBarsAppearance(android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+                            android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
+                }
+                raiz.setOnApplyWindowInsetsListener((v, ins) -> {
+                    android.graphics.Insets b = ins.getInsets(android.view.WindowInsets.Type.systemBars());
+                    hoja.setPadding(b.left, dp(8), b.right, dp(10) + b.bottom);
+                    return ins;
+                });
+            }
         }
-        dialogo.setCanceledOnTouchOutside(true);
+        dialogo.setCanceledOnTouchOutside(false);
         // «Atrás» sube un nivel; en el principal, cierra.
         dialogo.setOnKeyListener((d, codigo, ev) -> {
-            if (codigo == KeyEvent.KEYCODE_BACK && ev.getAction() == KeyEvent.ACTION_UP && pila.size() > 1) {
-                volver();
-                return true;
+            if (codigo != KeyEvent.KEYCODE_BACK) return false;
+            if (ev.getAction() == KeyEvent.ACTION_UP) {
+                if (pila.size() > 1) volver();
+                else cerrar(null);
             }
-            return false;
+            return true;
         });
     }
 
@@ -160,7 +195,31 @@ public final class MenuPanel {
         p.medir(v, a.getResources().getDisplayMetrics().widthPixels);
         p.pila.push(v);
         p.marco.addView(v);
+        p.hoja.setVisibility(View.INVISIBLE);
         p.dialogo.show();
+        p.hoja.post(p::entrarHoja);
+    }
+
+    /** La hoja sube desde abajo mientras aparece el velo. */
+    private void entrarHoja() {
+        hoja.setTranslationY(hoja.getHeight());
+        hoja.setVisibility(View.VISIBLE);
+        hoja.animate().translationY(0).setDuration(DURACION_HOJA)
+                .setInterpolator(new DecelerateInterpolator(2f)).withLayer().start();
+        velo.animate().alpha(1f).setDuration(DURACION_HOJA).start();
+    }
+
+    /** Baja la hoja, cierra y, ya cerrado, ejecuta "despues" (si lo hay). */
+    private void cerrar(Runnable despues) {
+        if (cerrando) return;
+        cerrando = true;
+        hoja.animate().translationY(hoja.getHeight()).setDuration(DURACION_HOJA - 40)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator(1.5f)).withLayer()
+                .withEndAction(() -> {
+                    dialogo.dismiss();
+                    if (despues != null) a.getWindow().getDecorView().post(despues);
+                }).start();
+        velo.animate().alpha(0f).setDuration(DURACION_HOJA - 40).start();
     }
 
     // --- Niveles ---
@@ -171,8 +230,20 @@ public final class MenuPanel {
 
         LinearLayout cabecera = new LinearLayout(a);
         cabecera.setGravity(Gravity.CENTER_VERTICAL);
-        cabecera.setPadding(conVolver ? dp(6) : dp(22), dp(4), dp(16), dp(6));
-        if (conVolver) cabecera.addView(Estilo.icono(a, Icono.Tipo.IZQUIERDA, "Volver", v -> volver()));
+        cabecera.setPadding(conVolver ? dp(16) : dp(22), dp(4), dp(16), dp(6));
+        if (conVolver) {
+            // Toda la cabecera (flecha y título) vuelve al nivel anterior.
+            ImageView flecha = new ImageView(a);
+            flecha.setImageDrawable(new Icono(a, Icono.Tipo.IZQUIERDA, Estilo.texto(a)));
+            cabecera.addView(flecha, new LinearLayout.LayoutParams(dp(22), dp(22)));
+            cabecera.setBackground(Estilo.tocable(a, 0, dp(14)));
+            cabecera.setContentDescription("Volver a " + (pila.isEmpty() ? "el menú" : "el nivel anterior"));
+            cabecera.setOnClickListener(v -> volver());
+            LinearLayout.LayoutParams lpCab = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+            lpCab.setMargins(dp(8), 0, dp(8), dp(2));
+            cabecera.setLayoutParams(lpCab);
+        }
         TextView titulo = new TextView(a);
         titulo.setText(n.titulo);
         titulo.setTextSize(conVolver ? 16 : 14);
@@ -182,9 +253,10 @@ public final class MenuPanel {
         titulo.setEllipsize(TextUtils.TruncateAt.MIDDLE);
         titulo.setMinHeight(dp(44));
         titulo.setGravity(Gravity.CENTER_VERTICAL);
-        titulo.setPadding(conVolver ? dp(4) : 0, 0, 0, 0);
+        titulo.setPadding(conVolver ? dp(14) : 0, 0, 0, 0);
         cabecera.addView(titulo, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        pagina.addView(cabecera);
+        if (cabecera.getLayoutParams() != null) pagina.addView(cabecera, cabecera.getLayoutParams());
+        else pagina.addView(cabecera);
 
         LinearLayout filas = new LinearLayout(a);
         filas.setOrientation(LinearLayout.VERTICAL);
@@ -243,11 +315,8 @@ public final class MenuPanel {
                 e.alCambiar.accept(e.marcado);
             });
         } else {
-            f.setOnClickListener(v -> {
-                dialogo.dismiss();
-                // Después de cerrar: la acción puede abrir otro diálogo o cambiar de pantalla.
-                if (e.accion != null) a.getWindow().getDecorView().post(e.accion);
-            });
+            // Después de cerrar: la acción puede abrir otro diálogo o cambiar de pantalla.
+            f.setOnClickListener(v -> cerrar(e.accion));
         }
         f.setEnabled(e.activo);
         f.setAlpha(e.activo ? 1f : 0.4f);
@@ -271,18 +340,24 @@ public final class MenuPanel {
 
     /**
      * Al bajar de nivel, todo se desplaza hacia la derecha: el actual sale por la derecha y el nuevo
-     * entra por la izquierda. Al volver, al revés. A la vez, la altura pasa a la del nivel nuevo.
+     * entra por la izquierda. Al volver, al revés. Para que vaya fluido no se recoloca nada en cada
+     * fotograma: el marco toma una sola vez la altura mayor de los dos niveles y la hoja se desplaza
+     * en vertical (lo que sobra queda bajo el borde de la pantalla); solo se mueven capas ya pintadas.
      */
     private void cambiar(View sale, View entra, boolean bajando) {
         animando = true;
         int ancho = marco.getWidth();
         int alto0 = marco.getHeight();
         int alto1 = medir(entra, ancho);
+        int maximo = Math.max(alto0, alto1);
         if (entra.getParent() == null) marco.addView(entra);
         entra.setTranslationX(bajando ? -ancho : ancho);
-        marco.getLayoutParams().height = alto0;
+        marco.getLayoutParams().height = maximo;
         marco.requestLayout();
+        hoja.setTranslationY(maximo - alto0);
 
+        sale.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        entra.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         ValueAnimator va = ValueAnimator.ofFloat(0f, 1f);
         va.setDuration(DURACION);
         va.setInterpolator(new DecelerateInterpolator(1.6f));
@@ -290,16 +365,18 @@ public final class MenuPanel {
             float f = (float) an.getAnimatedValue();
             sale.setTranslationX((bajando ? ancho : -ancho) * f);
             entra.setTranslationX((bajando ? -ancho : ancho) * (1 - f));
-            marco.getLayoutParams().height = Math.round(alto0 + (alto1 - alto0) * f);
-            marco.requestLayout();
+            hoja.setTranslationY(maximo - (alto0 + (alto1 - alto0) * f));
         });
         va.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator x) {
                 marco.removeView(sale);
                 sale.setTranslationX(0);
-                marco.getLayoutParams().height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                sale.setLayerType(View.LAYER_TYPE_NONE, null);
+                entra.setLayerType(View.LAYER_TYPE_NONE, null);
                 entra.getLayoutParams().height = alto1;
+                marco.getLayoutParams().height = ViewGroup.LayoutParams.WRAP_CONTENT;
                 marco.requestLayout();
+                hoja.setTranslationY(0);
                 animando = false;
             }
         });
