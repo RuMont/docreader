@@ -220,6 +220,30 @@ public final class EpubActivity extends Activity {
         marco = new FrameLayout(this);
         web = new Vista(this);
         configurarWeb(web);
+        // Un toque muestra u oculta las barras; deslizar a los lados cambia de capítulo.
+        android.view.GestureDetector gestos = new android.view.GestureDetector(this,
+                new android.view.GestureDetector.SimpleOnGestureListener() {
+                    @Override public boolean onSingleTapConfirmed(android.view.MotionEvent e) {
+                        if (!toqueEnEnlace() && barraBusqueda.getVisibility() != View.VISIBLE) alternarBarras();
+                        return false;
+                    }
+
+                    @Override public boolean onFling(android.view.MotionEvent e1, android.view.MotionEvent e2,
+                                                     float vx, float vy) {
+                        if (e1 == null || libro == null) return false;
+                        float dx = e2.getX() - e1.getX(), dy = e2.getY() - e1.getY();
+                        if (Math.abs(vx) < 700 || Math.abs(dx) < dp(80) || Math.abs(dx) < Math.abs(dy) * 1.5f) return false;
+                        // Con zoom o contenido ancho, primero se desplaza el propio capítulo hasta su borde.
+                        if (web.canScrollHorizontally(dx < 0 ? 1 : -1)) return false;
+                        if (dx < 0) siguiente();
+                        else anterior();
+                        return true;
+                    }
+                });
+        web.setOnTouchListener((v, e) -> {
+            gestos.onTouchEvent(e);
+            return false; // el WebView sigue recibiendo el gesto (desplazamiento, zoom, selección…)
+        });
         web.setVisibility(View.INVISIBLE);
         marco.addView(web, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -465,7 +489,7 @@ public final class EpubActivity extends Activity {
             cap = l.siguiente(-1);
             frac = 0;
         }
-        barraNav.setVisibility(View.VISIBLE);
+        barraNav.setVisibility(barrasVisibles ? View.VISIBLE : View.GONE);
         irA(Math.max(0, cap), null, frac, false);
         invalidateOptionsMenu();
     }
@@ -590,6 +614,64 @@ public final class EpubActivity extends Activity {
         hilo.execute(() -> {
             if (gen == generacion) obtener(s);
         });
+    }
+
+    // --- Barras (toque) ---
+
+    private boolean barrasVisibles = true;
+    /** Posición en pantalla del inicio del capítulo mientras cambian las barras (para que el texto no salte). */
+    private int anclaTexto;
+    private long finCompensar;
+    private final View.OnLayoutChangeListener compensar = (v, l, t, r, b, ol, ot, or, ob) -> {
+        if (web == null || System.currentTimeMillis() > finCompensar) return;
+        int[] pos = new int[2];
+        web.getLocationOnScreen(pos);
+        int nuevo = Math.max(0, pos[1] - anclaTexto);
+        if (nuevo != web.getScrollY()) web.scrollTo(web.getScrollX(), nuevo);
+    };
+
+    /**
+     * Muestra u oculta la barra superior, la de capítulos y las del sistema. Al cambiar el alto
+     * disponible, se corrige el desplazamiento para que el texto se quede quieto en la pantalla.
+     */
+    private void alternarBarras() {
+        if (libro == null || web == null) return;
+        barrasVisibles = !barrasVisibles;
+        int[] pos = new int[2];
+        web.getLocationOnScreen(pos);
+        anclaTexto = pos[1] - web.getScrollY();
+        finCompensar = System.currentTimeMillis() + 700; // las barras del sistema se animan un rato
+        web.removeOnLayoutChangeListener(compensar);
+        web.addOnLayoutChangeListener(compensar);
+
+        android.app.ActionBar ab = getActionBar();
+        if (ab != null) {
+            if (barrasVisibles) ab.show();
+            else ab.hide();
+        }
+        barraNav.setVisibility(barrasVisibles ? View.VISIBLE : View.GONE);
+        android.view.WindowInsetsController ctl =
+                android.os.Build.VERSION.SDK_INT >= 30 ? getWindow().getInsetsController() : null;
+        if (ctl != null) {
+            if (barrasVisibles) {
+                ctl.show(android.view.WindowInsets.Type.systemBars());
+            } else {
+                ctl.setSystemBarsBehavior(android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                ctl.hide(android.view.WindowInsets.Type.systemBars());
+            }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(barrasVisibles ? View.SYSTEM_UI_FLAG_VISIBLE
+                    : View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION);
+        }
+    }
+
+    /** ¿El último toque cayó sobre un enlace? Entonces no se muestran ni ocultan las barras. */
+    private boolean toqueEnEnlace() {
+        WebView.HitTestResult r = web.getHitTestResult();
+        int t = r == null ? WebView.HitTestResult.UNKNOWN_TYPE : r.getType();
+        return t == WebView.HitTestResult.SRC_ANCHOR_TYPE || t == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
+                || t == WebView.HitTestResult.EMAIL_TYPE || t == WebView.HitTestResult.PHONE_TYPE;
     }
 
     private void anterior() {
