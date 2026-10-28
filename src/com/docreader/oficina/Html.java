@@ -46,6 +46,12 @@ final class Html {
          */
         String cssNoche;
 
+        /**
+         * Hojas de cálculo enormes que se muestran por bloques de filas (null si no hay); en esas
+         * posiciones, cuerposHojas guarda el HTML del bloque que se está viendo.
+         */
+        HojaGrande[] grandes;
+
         /** Estilos que se añaden con la opción "Ajustar líneas"; null si el documento no la ofrece. */
         String cssAjustar;
 

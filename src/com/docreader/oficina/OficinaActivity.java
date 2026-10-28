@@ -77,6 +77,16 @@ public final class OficinaActivity extends Activity {
     private static final int SIN_PROTECCION = 0, OOXML = 1, OOXML_CIFRADO = 2, ODF = 3, ODF_CIFRADO = 4;
     private int proteccion = SIN_PROTECCION;
     private boolean modoMacros, hayMacros, avisoCerrado;
+
+    // Hojas enormes (HojaGrande): bloque visto de cada hoja, barra de filas y búsqueda por bloques.
+    private int[] bloqueHoja;
+    private LinearLayout barraFilas;
+    private TextView rotuloFilas;
+    private android.widget.ImageButton filasAnterior, filasSiguiente;
+    private String terminoGrande;
+    private boolean[] bloquesBusqueda;
+    private int activaBusq, totalBusq, generacionBusqueda;
+    private boolean buscarAlCargar, irAlUltimo;
     private View avisoMacros;
     private String claveDoc, claveNueva; // con la que se abrió / la elegida para proteger
 
@@ -435,6 +445,28 @@ public final class OficinaActivity extends Activity {
             int vis = pestanas.getWidth() > disponible ? View.VISIBLE : View.GONE;
             if (botonHojas.getVisibility() != vis) botonHojas.setVisibility(vis);
         }));
+        // Barra de bloques de filas (solo en hojas enormes): ‹ Filas 1–1000 de 500 001 ›
+        barraFilas = new LinearLayout(this);
+        barraFilas.setGravity(Gravity.CENTER_VERTICAL);
+        barraFilas.setBackground(Estilo.barra(this, true));
+        barraFilas.setPadding(dp(4), 0, dp(4), 0);
+        barraFilas.setVisibility(View.GONE);
+        filasAnterior = Estilo.icono(this, Icono.Tipo.IZQUIERDA, "Filas anteriores", v -> moverBloque(-1));
+        filasSiguiente = Estilo.icono(this, Icono.Tipo.DERECHA, "Filas siguientes", v -> moverBloque(1));
+        rotuloFilas = new TextView(this);
+        rotuloFilas.setGravity(Gravity.CENTER);
+        rotuloFilas.setTextColor(Estilo.texto(this));
+        rotuloFilas.setTextSize(14);
+        rotuloFilas.setMinHeight(dp(44));
+        rotuloFilas.setBackground(Estilo.tocable(this, 0, dp(12)));
+        rotuloFilas.setContentDescription("Ir a una fila");
+        rotuloFilas.setOnClickListener(v -> dialogoIrAFila());
+        barraFilas.addView(filasAnterior);
+        barraFilas.addView(rotuloFilas, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        barraFilas.addView(filasSiguiente);
+        raiz.addView(barraFilas, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
         raiz.addView(barraHojas, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -466,6 +498,10 @@ public final class OficinaActivity extends Activity {
                 return;
             }
             if (barraBusqueda.getVisibility() != View.VISIBLE) return;
+            if (terminoGrande != null && grandeActual() != null) {
+                hallazgoGrande(activa, total, terminado);
+                return;
+            }
             if (total == 0) {
                 contador.setText(!terminado ? "…"
                         : documento != null && documento.numHojas() > 1 ? "Sin resultados en esta hoja" : "Sin resultados");
@@ -506,6 +542,11 @@ public final class OficinaActivity extends Activity {
 
             @Override public void onPageFinished(WebView v, String url) {
                 v.setVisibility(View.VISIBLE);
+                if (buscarAlCargar && terminoGrande != null) {
+                    buscarAlCargar = false;
+                    busquedaLanzada = true;
+                    v.findAllAsync(terminoGrande);
+                }
                 if (enPresentacion && terminoPres != null) {
                     busquedaLanzada = true;
                     v.findAllAsync(terminoPres);
@@ -577,6 +618,8 @@ public final class OficinaActivity extends Activity {
     /** Convierte el documento; "clave" es la contraseña si el usuario ya la escribió. */
     private void abrir(String clave) {
         cargando.setVisibility(View.VISIBLE);
+        cargando.setText("Abriendo…");
+        cargando.post(progresoLectura);
         final String n = nombre, m = mime;
         final boolean oscuro = noche;
         final int ops = opciones();
@@ -1227,6 +1270,157 @@ public final class OficinaActivity extends Activity {
         return comoPagina && documento != null && documento.paginaWeb != null;
     }
 
+    // --- Hojas enormes (por bloques de filas) ---
+
+    private HojaGrande grandeActual() {
+        if (documento == null || documento.grandes == null || enPresentacion) return null;
+        return hojaActual >= 0 && hojaActual < documento.grandes.length ? documento.grandes[hojaActual] : null;
+    }
+
+    private void actualizarBarraFilas() {
+        HojaGrande g = grandeActual();
+        if (g == null || bloqueHoja == null) {
+            barraFilas.setVisibility(View.GONE);
+            return;
+        }
+        int b = bloqueHoja[hojaActual];
+        rotuloFilas.setText(g.rotulo(b));
+        filasAnterior.setEnabled(b > 0);
+        filasAnterior.setAlpha(b > 0 ? 1f : 0.3f);
+        filasSiguiente.setEnabled(b < g.bloques() - 1);
+        filasSiguiente.setAlpha(b < g.bloques() - 1 ? 1f : 0.3f);
+        barraFilas.setVisibility(View.VISIBLE);
+    }
+
+    private void moverBloque(int paso) {
+        if (grandeActual() != null) mostrarBloque(bloqueHoja[hojaActual] + paso);
+    }
+
+    /** Muestra el bloque b de la hoja grande actual (genera solo su HTML). */
+    private void mostrarBloque(int b) {
+        HojaGrande g = grandeActual();
+        if (g == null) return;
+        b = Math.max(0, Math.min(b, g.bloques() - 1));
+        bloqueHoja[hojaActual] = b;
+        documento.cuerposHojas[hojaActual] = g.bloque(b);
+        actualizarBarraFilas();
+        if (terminoGrande != null) {
+            buscarAlCargar = true; // al cargar, se vuelve a buscar en el bloque nuevo
+            contador.setText("…");
+        }
+        volverX = volverY = 0;
+        cargar(Html.pagina(documento, noche, hojaActual, opciones()));
+    }
+
+    private void dialogoIrAFila() {
+        HojaGrande g = grandeActual();
+        if (g == null) return;
+        EditText campoFila = new EditText(this);
+        campoFila.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        campoFila.setHint("1 – " + HojaGrande.miles(g.maxFila));
+        FrameLayout m = new FrameLayout(this);
+        m.setPadding(dp(20), dp(8), dp(20), 0);
+        m.addView(campoFila);
+        new AlertDialog.Builder(this)
+                .setTitle("Ir a la fila")
+                .setView(m)
+                .setPositiveButton("Ir", (d, w) -> {
+                    int f;
+                    try {
+                        f = Integer.parseInt(campoFila.getText().toString().trim());
+                    } catch (NumberFormatException e) {
+                        return;
+                    }
+                    f = Math.max(1, Math.min(f, g.maxFila));
+                    int b = g.bloqueDeFila(f);
+                    // Se coloca la fila pedida (aproximadamente) a la vista, por su posición en el bloque.
+                    int f0 = g.primeraFila(b), f1 = g.ultimaFila(b);
+                    volverFraccion = f1 > f0 ? (f - f0) / (double) (f1 - f0) : 0;
+                    double fr = volverFraccion;
+                    mostrarBloque(b);
+                    volverFraccion = fr;
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
+        campoFila.requestFocus();
+    }
+
+    private void olvidarBusquedaGrande() {
+        generacionBusqueda++;
+        terminoGrande = null;
+        bloquesBusqueda = null;
+        buscarAlCargar = irAlUltimo = false;
+        activaBusq = totalBusq = 0;
+    }
+
+    /** Busca en toda la hoja (en segundo plano) y va al primer bloque con resultados desde el actual. */
+    private void buscarEnGrande(String texto) {
+        HojaGrande g = grandeActual();
+        terminoGrande = texto;
+        contador.setText("Buscando…");
+        final int gen = ++generacionBusqueda;
+        new Thread(() -> {
+            boolean[] r = g.buscar(texto, () -> gen == generacionBusqueda);
+            runOnUiThread(() -> {
+                if (gen != generacionBusqueda || r == null || web == null) return;
+                bloquesBusqueda = r;
+                int actual = bloqueHoja[hojaActual];
+                int destino = r[actual] ? actual : siguienteBloqueConResultados(actual, 1);
+                if (destino < 0) {
+                    web.clearMatches();
+                    contador.setText("Sin resultados");
+                    return;
+                }
+                if (destino == actual) {
+                    busquedaLanzada = true;
+                    web.findAllAsync(texto);
+                } else {
+                    mostrarBloque(destino);
+                }
+            });
+        }, "buscar-hoja").start();
+    }
+
+    /** Siguiente bloque con resultados en la dirección dada (dando la vuelta), o -1. */
+    private int siguienteBloqueConResultados(int desde, int dir) {
+        if (bloquesBusqueda == null) return -1;
+        int n = bloquesBusqueda.length;
+        for (int k = 1; k <= n; k++) {
+            int i = ((desde + dir * k) % n + n) % n;
+            if (bloquesBusqueda[i]) return i;
+        }
+        return -1;
+    }
+
+    private void hallazgoGrande(int activa, int total, boolean terminado) {
+        if (!busquedaLanzada) return; // aviso de la página anterior
+        if (!terminado) {
+            contador.setText("…");
+            return;
+        }
+        if (irAlUltimo && total > 0) {
+            irAlUltimo = false;
+            web.findNext(false); // desde el principio, hacia atrás: el último del bloque
+            return;
+        }
+        activaBusq = activa;
+        totalBusq = total;
+        HojaGrande g = grandeActual();
+        int b = bloqueHoja[hojaActual];
+        String filas = g != null ? " · filas " + HojaGrande.miles(g.primeraFila(b)) + "–" + HojaGrande.miles(g.ultimaFila(b)) : "";
+        contador.setText(total == 0 ? "Sin resultados en estas filas" : (activa + 1) + "/" + total + filas);
+    }
+
+    /** Mientras se lee una hoja enorme, muestra el porcentaje. */
+    private final Runnable progresoLectura = new Runnable() {
+        @Override public void run() {
+            if (cargando == null || cargando.getVisibility() != View.VISIBLE) return;
+            int p = Xlsx.progreso;
+            if (p >= 0) cargando.setText("Leyendo la hoja… " + p + " %");
+            cargando.postDelayed(this, 250);
+        }
+    };
+
     // --- Hojas de Excel ---
 
     private void montarPestanas() {
@@ -1261,6 +1455,9 @@ public final class OficinaActivity extends Activity {
         hojaActual = i;
         if (!modoMacros) Recientes.guardarPagina(this, uri, i);
         marcarPestana();
+        if (bloqueHoja == null || bloqueHoja.length != documento.numHojas()) bloqueHoja = new int[documento.numHojas()];
+        if (otra) olvidarBusquedaGrande();
+        actualizarBarraFilas();
         if (barraBusqueda.getVisibility() == View.VISIBLE) {
             web.clearMatches();
             contador.setText("");
@@ -1717,21 +1914,39 @@ public final class OficinaActivity extends Activity {
     private void buscar(String texto) {
         texto = texto.trim();
         if (web == null) return;
+        olvidarBusquedaGrande();
         if (texto.isEmpty()) {
             web.clearMatches();
             contador.setText("");
             return;
         }
         teclado(false);
+        if (grandeActual() != null) {
+            buscarEnGrande(texto);
+            return;
+        }
         contador.setText("…");
         web.findAllAsync(texto);
     }
 
     private void saltar(boolean adelante) {
-        if (web != null && campo.getText().toString().trim().length() > 0) web.findNext(adelante);
+        if (web == null || campo.getText().toString().trim().isEmpty()) return;
+        if (terminoGrande != null && bloquesBusqueda != null && grandeActual() != null) {
+            // Al pasar del primer o último resultado del bloque, se salta al bloque con resultados más cercano.
+            boolean borde = totalBusq == 0 || (adelante ? activaBusq >= totalBusq - 1 : activaBusq <= 0);
+            int b = bloqueHoja[hojaActual];
+            int otro = borde ? siguienteBloqueConResultados(b, adelante ? 1 : -1) : -1;
+            if (otro >= 0 && otro != b) {
+                irAlUltimo = !adelante;
+                mostrarBloque(otro);
+                return;
+            }
+        }
+        web.findNext(adelante);
     }
 
     private void cerrarBusqueda() {
+        olvidarBusquedaGrande();
         if (web != null) web.clearMatches();
         contador.setText("");
         campo.setText("");

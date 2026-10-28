@@ -44,6 +44,26 @@ final class Paquete {
         boolean es(String sufijo) { return tipo.endsWith(sufijo); }
     }
 
+    /**
+     * Partes enormes (una hoja de cálculo de cientos de MB, por ejemplo) que no se descomprimen al
+     * leer el paquete: se quedan comprimidas y se leen en streaming con {@link #flujo}.
+     */
+    static final long UMBRAL_DIFERIR = 16L << 20;
+
+    private static final class Diferida {
+        final byte[] zip;
+        final int inicio, comprimido, metodo;
+
+        Diferida(byte[] zip, int inicio, int comprimido, int metodo) {
+            this.zip = zip;
+            this.inicio = inicio;
+            this.comprimido = comprimido;
+            this.metodo = metodo;
+        }
+    }
+
+    private final Map<String, Diferida> diferidas = new HashMap<>();
+
     /** Archivos en el orden del zip (LinkedHashMap: hace falta para volver a escribirlo). */
     private final Map<String, byte[]> archivos = new java.util.LinkedHashMap<>();
     private final Map<String, String> sinMayusculas = new HashMap<>();
@@ -62,6 +82,11 @@ final class Paquete {
             todo.write(b, 0, n);
         }
         byte[] datos = todo.toByteArray();
+        if (tieneEnormes(datos)) {
+            // Con partes enormes se lee por el directorio central, dejándolas comprimidas.
+            Paquete pq = leerDirectorio(datos, null, true);
+            if (pq != null) return pq;
+        }
         try {
             return leerFlujo(new ByteArrayInputStream(datos));
         } catch (Fallo f) {
@@ -122,16 +147,41 @@ final class Paquete {
         }
     }
 
-    /** Lee el zip a partir de su directorio central (solo la ruta "solo" si no es null); null si no se puede. */
-    private static Paquete leerDirectorio(byte[] z, String solo) throws Fallo {
+    /** ¿Tiene el zip alguna parte que, descomprimida, pase de {@link #UMBRAL_DIFERIR}? */
+    private static boolean tieneEnormes(byte[] z) {
         try {
-            int fin = -1;
-            for (int i = z.length - 22; i >= Math.max(0, z.length - 22 - 65535); i--) {
-                if (u32(z, i) == 0x06054b50L) {
-                    fin = i;
-                    break;
-                }
+            int fin = finDirectorio(z);
+            if (fin < 0) return false;
+            int cuantas = u16(z, fin + 10);
+            long pos = u32(z, fin + 16);
+            for (int k = 0; k < cuantas; k++) {
+                int p = (int) pos;
+                if (p < 0 || p + 46 > z.length || u32(z, p) != 0x02014b50L) return false;
+                if (u32(z, p + 24) > UMBRAL_DIFERIR) return true;
+                pos = (long) p + 46 + u16(z, p + 28) + u16(z, p + 30) + u16(z, p + 32);
             }
+        } catch (RuntimeException ignorado) { }
+        return false;
+    }
+
+    private static int finDirectorio(byte[] z) {
+        for (int i = z.length - 22; i >= Math.max(0, z.length - 22 - 65535); i--) {
+            if (u32(z, i) == 0x06054b50L) return i;
+        }
+        return -1;
+    }
+
+    private static Paquete leerDirectorio(byte[] z, String solo) throws Fallo {
+        return leerDirectorio(z, solo, false);
+    }
+
+    /**
+     * Lee el zip a partir de su directorio central (solo la ruta "solo" si no es null); null si no
+     * se puede. Con "diferir", las partes enormes no se descomprimen (ver {@link #flujo}).
+     */
+    private static Paquete leerDirectorio(byte[] z, String solo, boolean diferir) throws Fallo {
+        try {
+            int fin = finDirectorio(z);
             if (fin < 0) return null;
             int cuantas = u16(z, fin + 10);
             long pos = u32(z, fin + 16);
@@ -150,6 +200,11 @@ final class Paquete {
                 if (solo != null && !solo.equalsIgnoreCase(nombre)) continue;
                 long inicio = local + 30 + u16(z, (int) local + 26) + u16(z, (int) local + 28);
                 if (comprimido > z.length || inicio + comprimido > z.length) continue;
+                if (diferir && tam > UMBRAL_DIFERIR && (metodo == 0 || metodo == 8)) {
+                    pq.diferidas.put(nombre, new Diferida(z, (int) inicio, (int) comprimido, metodo));
+                    pq.sinMayusculas.put(nombre.toLowerCase(Locale.ROOT), nombre);
+                    continue;
+                }
                 if (tam > LIMITE || total + tam > LIMITE) throw new Fallo(MENSAJE_GRANDE);
                 byte[] datos;
                 if (metodo == 0) {
@@ -179,7 +234,7 @@ final class Paquete {
                 pq.archivos.put(nombre, datos);
                 pq.sinMayusculas.put(nombre.toLowerCase(Locale.ROOT), nombre);
             }
-            return pq.archivos.isEmpty() ? null : pq;
+            return pq.archivos.isEmpty() && pq.diferidas.isEmpty() ? null : pq;
         } catch (RuntimeException e) {
             return null;
         }
@@ -193,7 +248,47 @@ final class Paquete {
         return ((b[i] & 0xFF) | (b[i + 1] & 0xFF) << 8 | (b[i + 2] & 0xFF) << 16 | (long) (b[i + 3] & 0xFF) << 24);
     }
 
-    boolean existe(String ruta) { return bytes(ruta) != null; }
+    boolean existe(String ruta) { return bytes(ruta) != null || diferida(ruta) != null; }
+
+    /** ¿Es una parte enorme que solo se puede leer en streaming? */
+    boolean esDiferida(String ruta) { return diferida(ruta) != null; }
+
+    private Diferida diferida(String ruta) {
+        if (ruta == null || diferidas.isEmpty()) return null;
+        String r = normalizar(ruta);
+        Diferida d = diferidas.get(r);
+        if (d == null) {
+            String real = sinMayusculas.get(r.toLowerCase(Locale.ROOT));
+            if (real != null) d = diferidas.get(real);
+        }
+        return d;
+    }
+
+    /** Tamaño comprimido de una parte diferida (para calcular el progreso), o -1. */
+    long comprimido(String ruta) {
+        Diferida d = diferida(ruta);
+        return d == null ? -1 : d.comprimido;
+    }
+
+    /**
+     * Contenido de una parte como flujo: de memoria o, si es diferida, descomprimiéndola sobre la
+     * marcha. "leido" (opcional) acumula los bytes comprimidos consumidos, para el progreso.
+     */
+    InputStream flujo(String ruta, java.util.concurrent.atomic.AtomicLong leido) {
+        byte[] b = bytes(ruta);
+        if (b != null) return new ByteArrayInputStream(b);
+        Diferida d = diferida(ruta);
+        if (d == null) return null;
+        InputStream crudo = new ByteArrayInputStream(d.zip, d.inicio, d.comprimido) {
+            @Override public synchronized int read(byte[] x, int o, int n) {
+                int r = super.read(x, o, n);
+                if (r > 0 && leido != null) leido.addAndGet(r);
+                return r;
+            }
+        };
+        if (d.metodo == 0) return crudo;
+        return new java.util.zip.InflaterInputStream(crudo, new java.util.zip.Inflater(true), 1 << 16);
+    }
 
     /**
      * Sustituye el contenido de un archivo del paquete (con null lo quita). Lo usa el descifrado
@@ -229,7 +324,27 @@ final class Paquete {
     /** Parser con espacios de nombres para un archivo del paquete, o null si no existe. */
     XmlPullParser parser(String ruta) throws XmlPullParserException {
         byte[] b = bytes(ruta);
-        if (b == null || tieneDoctype(b)) return null;
+        InputStream entrada;
+        if (b == null) {
+            // Parte enorme: en streaming (comprobando antes que no traiga DTD).
+            InputStream f = diferida(ruta) == null ? null : flujo(ruta, null);
+            if (f == null) return null;
+            java.io.BufferedInputStream bf = new java.io.BufferedInputStream(f, 1 << 16);
+            try {
+                bf.mark(4096);
+                byte[] cab = new byte[2048];
+                int n = 0;
+                for (int r; n < cab.length && (r = bf.read(cab, n, cab.length - n)) > 0; ) n += r;
+                bf.reset();
+                if (tieneDoctype(java.util.Arrays.copyOf(cab, n))) return null;
+            } catch (IOException e) {
+                return null;
+            }
+            entrada = bf;
+        } else {
+            if (tieneDoctype(b)) return null;
+            entrada = new ByteArrayInputStream(b);
+        }
         XmlPullParser p = Xml.newPullParser();
         try {
             p.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true);
@@ -238,7 +353,7 @@ final class Paquete {
             // OOXML nunca usa DTD; sin ellas no hay entidades que expandir (ni "bombas" XML).
             p.setFeature(XmlPullParser.FEATURE_PROCESS_DOCDECL, false);
         } catch (XmlPullParserException ignorado) { }
-        p.setInput(new ByteArrayInputStream(b), null);
+        p.setInput(entrada, null);
         return p;
     }
 

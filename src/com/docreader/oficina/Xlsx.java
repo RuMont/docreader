@@ -48,7 +48,7 @@ final class Xlsx {
         String color;
     }
 
-    private static final class Celda {
+    static final class Celda {
         String html, clase, estilo;
         boolean vacia;
     }
@@ -58,7 +58,14 @@ final class Xlsx {
         boolean grafico;
     }
 
-    private final Paquete pq;
+    private Paquete pq;
+    /** Progreso de la lectura de hojas enormes (0–100), o -1; lo consulta el visor para mostrarlo. */
+    static volatile int progreso = -1;
+
+    /** Hoja con más filas de las que caben de una vez: se pasa a {@link HojaGrande}. */
+    private static final class DemasiadasFilas extends RuntimeException {
+        DemasiadasFilas() { super(null, null, false, false); }
+    }
     private final List<String> compartidas = new ArrayList<>();
     private final List<Xf> xfs = new ArrayList<>();
     private final Map<Integer, String> formatos = new HashMap<>();
@@ -74,14 +81,25 @@ final class Xlsx {
         Xlsx x = new Xlsx(pq);
         StringBuilder sb = new StringBuilder();
         List<String> nombres = new ArrayList<>(), cuerpos = new ArrayList<>();
-        x.procesar(sb, nombres, cuerpos);
+        List<HojaGrande> grandes = new ArrayList<>();
+        try {
+            x.procesar(sb, nombres, cuerpos, grandes);
+        } finally {
+            progreso = -1;
+        }
+        x.pq = null; // ya no hace falta (y puede ocupar mucho)
         if (cuerpos.isEmpty()) return new Html.Documento(sb.toString(), CSS, Html.VIEWPORT_MOVIL, "xlsx");
-        return new Html.Documento("", CSS, Html.VIEWPORT_MOVIL, "xlsx",
+        Html.Documento d = new Html.Documento("", CSS, Html.VIEWPORT_MOVIL, "xlsx",
                 nombres.toArray(new String[0]), cuerpos.toArray(new String[0]));
+        boolean alguna = false;
+        for (HojaGrande g : grandes) alguna |= g != null;
+        if (alguna) d.grandes = grandes.toArray(new HojaGrande[0]);
+        return d;
     }
 
     /** Cada hoja visible se convierte por separado: nombre en "nombres", HTML en "cuerpos". */
-    private void procesar(StringBuilder sb, List<String> nombres, List<String> cuerpos) throws Fallo {
+    private void procesar(StringBuilder sb, List<String> nombres, List<String> cuerpos, List<HojaGrande> grandes)
+            throws Fallo {
         String libro = pq.principal("xl/workbook.xml");
         if (!pq.existe(libro)) throw new Fallo("No se encontró el libro de cálculo. Puede que el archivo esté dañado.");
         Map<String, Paquete.Relacion> rels = pq.relaciones(libro);
@@ -132,7 +150,12 @@ final class Xlsx {
         long total = 0;
         for (Hoja h : hojas) {
             sb.setLength(0);
-            if (total > MAX_HTML) {
+            HojaGrande grande = null;
+            if (!h.grafico && pq.esDiferida(h.ruta)) {
+                grande = grande(h);
+                if (grande == null) sb.append("<p class=nota>No se pudo leer esta hoja.</p>");
+                else sb.append(grande.bloque(0));
+            } else if (total > MAX_HTML) {
                 sb.append("<p class=nota>El libro es demasiado grande: esta hoja no se muestra.</p>");
             } else if (h.grafico) {
                 sb.append("<p class=nota>Esta hoja es un gráfico y no se puede mostrar.</p>");
@@ -140,15 +163,75 @@ final class Xlsx {
                 int antes = sb.length();
                 try {
                     hoja(h.ruta, sb);
+                } catch (DemasiadasFilas e) {
+                    // Más filas de las que caben de una vez: se lee como hoja grande, por bloques.
+                    sb.setLength(antes);
+                    grande = grande(h);
+                    if (grande == null) sb.append("<p class=nota>No se pudo leer esta hoja.</p>");
+                    else sb.append(grande.bloque(0));
                 } catch (XmlPullParserException | IOException | RuntimeException e) {
                     sb.setLength(antes);
                     sb.append("<p class=nota>No se pudo leer esta hoja.</p>");
                 }
             }
-            total += sb.length();
+            if (grande == null) total += sb.length();
             nombres.add(h.nombre);
             cuerpos.add(sb.toString());
+            grandes.add(grande);
         }
+    }
+
+    /** Lee una hoja grande en streaming, actualizando {@link #progreso}; null si falla. */
+    private HojaGrande grande(Hoja h) {
+        java.util.concurrent.atomic.AtomicLong leido = new java.util.concurrent.atomic.AtomicLong();
+        long total = pq.comprimido(h.ruta);
+        if (total <= 0) {
+            byte[] b = pq.bytes(h.ruta);
+            total = b == null ? 1 : b.length;
+        }
+        final long tot = total;
+        java.io.InputStream in = pq.flujo(h.ruta, leido);
+        if (in == null) return null;
+        java.io.InputStream conProgreso = new java.io.FilterInputStream(in) {
+            @Override public int read(byte[] x, int o, int n) throws IOException {
+                int r = super.read(x, o, n);
+                // Las partes en memoria no cuentan en "leido": se aproxima con lo leído del flujo.
+                if (pq != null && pq.comprimido(h.ruta) < 0 && r > 0) leido.addAndGet(r);
+                progreso = (int) Math.min(99, leido.get() * 100 / tot);
+                return r;
+            }
+        };
+        try (java.io.InputStream cerrar = conProgreso) {
+            return HojaGrande.leer(h.nombre, this, cerrar);
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** Textos compartidos sin etiquetas y "plegados" (para buscar), calculados una vez. */
+    private String[] planas;
+
+    synchronized String[] compartidasPlanas() {
+        if (planas == null) {
+            planas = new String[compartidas.size()];
+            for (int i = 0; i < planas.length; i++) planas[i] = HojaGrande.plegar(textoPlano(compartidas.get(i)));
+        }
+        return planas;
+    }
+
+    /** Texto visible de un fragmento HTML (sin etiquetas y con las entidades resueltas). */
+    static String textoPlano(String html) {
+        if (html.indexOf('<') < 0 && html.indexOf('&') < 0) return html;
+        StringBuilder sb = new StringBuilder(html.length());
+        boolean etiqueta = false;
+        for (int i = 0; i < html.length(); i++) {
+            char c = html.charAt(i);
+            if (c == '<') etiqueta = true;
+            else if (c == '>') etiqueta = false;
+            else if (!etiqueta) sb.append(c);
+        }
+        return sb.toString().replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
+                .replace("&#39;", "'").replace("&amp;", "&");
     }
 
     // --- Textos compartidos y estilos ---
@@ -400,6 +483,7 @@ final class Xlsx {
                         else Lectura.saltar(p);
                     }
                     Celda ce = celda(tipo, v, rica, s);
+                    if (f > MAX_FILAS && !ce.vacia && c <= MAX_COLS) throw new DemasiadasFilas();
                     if (f > MAX_FILAS || c > MAX_COLS) {
                         if (!ce.vacia) recortada = true;
                         break;
@@ -440,6 +524,21 @@ final class Xlsx {
             return;
         }
 
+        int ultimaFila = tabla(sb, celdas, fusiones, anchos, 1, maxF, maxC);
+        if (ultimaFila < maxF) recortada = true;
+        if (recortada) {
+            sb.append("<p class=nota>La hoja es muy grande: se muestran solo las primeras ")
+                    .append(ultimaFila).append(" filas y ").append(maxC).append(" columnas.</p>");
+        }
+        if (dibujos) sb.append("<p class=nota>Esta hoja tiene gráficos o imágenes que no se muestran.</p>");
+    }
+
+    /**
+     * Tabla HTML de las filas f0..maxF (números de fila reales) y columnas 1..maxC. La usan las
+     * hojas normales y los bloques de {@link HojaGrande}. Devuelve la última fila escrita.
+     */
+    int tabla(StringBuilder sb, Map<Long, Celda> celdas, List<int[]> fusiones, Map<Integer, Double> anchos,
+              int f0, int maxF, int maxC) {
         Map<Long, int[]> inicioFusion = new HashMap<>();
         Set<Long> cubiertas = new HashSet<>();
         for (int[] r : fusiones) {
@@ -466,10 +565,9 @@ final class Xlsx {
         for (int c = 1; c <= maxC; c++) sb.append("<th>").append(Html.letras(c)).append("</th>");
         sb.append("</tr></thead><tbody>");
         int ultimaFila = maxF;
-        for (int f = 1; f <= maxF; f++) {
+        for (int f = f0; f <= maxF; f++) {
             if (sb.length() > MAX_HTML) {
                 ultimaFila = f - 1;
-                recortada = true;
                 break;
             }
             sb.append("<tr><th>").append(f).append("</th>");
@@ -495,14 +593,10 @@ final class Xlsx {
             sb.append("</tr>");
         }
         sb.append("</tbody></table>");
-        if (recortada) {
-            sb.append("<p class=nota>La hoja es muy grande: se muestran solo las primeras ")
-                    .append(ultimaFila).append(" filas y ").append(maxC).append(" columnas.</p>");
-        }
-        if (dibujos) sb.append("<p class=nota>Esta hoja tiene gráficos o imágenes que no se muestran.</p>");
+        return ultimaFila;
     }
 
-    private Celda celda(String tipo, String v, String rica, int s) {
+    Celda celda(String tipo, String v, String rica, int s) {
         Celda ce = new Celda();
         Xf x = s >= 0 && s < xfs.size() ? xfs.get(s) : null;
         String clase = null;
