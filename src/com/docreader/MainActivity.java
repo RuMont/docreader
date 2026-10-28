@@ -9,8 +9,7 @@ import android.text.format.DateUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
-import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -26,8 +25,8 @@ public final class MainActivity extends Activity {
     private static final int ELEGIR_PDF = 1, BUSCAR_DE_NUEVO = 2;
 
     private final List<JSONObject> recientes = new ArrayList<>();
-    private ArrayAdapter<JSONObject> adaptador;
-    private TextView vacio;
+    private android.widget.BaseAdapter adaptador;
+    private LinearLayout vacio, filaSeccion;
     /** Entradas de recientes que ahora mismo no se pueden leer (sin permiso, movidas o borradas). */
     private final java.util.Set<String> sinAcceso = new java.util.HashSet<>();
     private int generacion;
@@ -38,68 +37,153 @@ public final class MainActivity extends Activity {
         super.onCreate(b);
         int m = dp(16);
 
-        LinearLayout raiz = new LinearLayout(this);
-        raiz.setOrientation(LinearLayout.VERTICAL);
-
-        Button abrir = new Button(this);
-        abrir.setText("Abrir documento");
-        abrir.setOnClickListener(v -> elegir());
-        LinearLayout.LayoutParams lpBoton = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lpBoton.setMargins(m, m, m, m / 2);
-        raiz.addView(abrir, lpBoton);
-
-        TextView titulo = new TextView(this);
-        titulo.setText("Recientes");
-        titulo.setTextSize(14);
-        titulo.setAlpha(0.7f);
-        titulo.setPadding(m, m / 2, m, m / 2);
-        raiz.addView(titulo);
-
-        vacio = new TextView(this);
-        vacio.setText("Aún no has abierto ningún documento.\nPulsa «Abrir documento» para elegir un PDF,\n"
-                + "Word, Excel, PowerPoint o texto.");
-        vacio.setGravity(Gravity.CENTER);
-        vacio.setPadding(m, m * 3, m, m);
-        raiz.addView(vacio);
-
         ListView lista = new ListView(this);
-        adaptador = new ArrayAdapter<JSONObject>(this, android.R.layout.simple_list_item_2,
-                android.R.id.text1, recientes) {
+        lista.setDivider(null);
+        lista.setSelector(new android.graphics.drawable.ColorDrawable(0));
+        lista.setBackgroundColor(Estilo.fondo(this));
+        lista.setClipToPadding(false);
+        lista.setPadding(0, 0, 0, dp(24));
+
+        // Cabecera (se desplaza con la lista): acciones principales y título de la sección.
+        LinearLayout cabecera = new LinearLayout(this);
+        cabecera.setOrientation(LinearLayout.VERTICAL);
+        cabecera.setPadding(m, dp(20), m, 0);
+        cabecera.addView(Estilo.principal(this, "Abrir documento", Icono.Tipo.CARPETA, v -> elegir()),
+                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams lpUnir = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lpUnir.topMargin = dp(10);
+        cabecera.addView(Estilo.tonal(this, "Unir varios PDF", Icono.Tipo.UNIR, v ->
+                startActivity(new Intent(this, com.docreader.herramientas.FusionarActivity.class))), lpUnir);
+
+        filaSeccion = new LinearLayout(this);
+        filaSeccion.setGravity(Gravity.CENTER_VERTICAL);
+        filaSeccion.setPadding(dp(4), dp(22), 0, dp(2));
+        filaSeccion.addView(Estilo.seccion(this, "Recientes"),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        filaSeccion.addView(Estilo.textoBoton(this, "Borrar", v -> confirmarBorrado()));
+        cabecera.addView(filaSeccion);
+
+        // Estado vacío.
+        vacio = new LinearLayout(this);
+        vacio.setOrientation(LinearLayout.VERTICAL);
+        vacio.setGravity(Gravity.CENTER_HORIZONTAL);
+        vacio.setPadding(m, dp(56), m, m);
+        android.widget.ImageView ilustracion = new android.widget.ImageView(this);
+        ilustracion.setImageDrawable(new Icono(this, Icono.Tipo.DOCUMENTO, Estilo.texto2(this)));
+        ilustracion.setAlpha(0.6f);
+        vacio.addView(ilustracion, new LinearLayout.LayoutParams(dp(56), dp(56)));
+        TextView t1 = new TextView(this);
+        t1.setText("Sin documentos recientes");
+        t1.setTextSize(17);
+        t1.setTextColor(Estilo.texto(this));
+        t1.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
+        t1.setPadding(0, dp(14), 0, dp(6));
+        vacio.addView(t1);
+        TextView t2 = new TextView(this);
+        t2.setText("Abre un PDF, un documento de Office, un libro EPUB, una imagen o cualquier texto. "
+                + "También puedes usar «Abrir con» desde otra app.");
+        t2.setTextColor(Estilo.texto2(this));
+        t2.setGravity(Gravity.CENTER);
+        t2.setLineSpacing(0, 1.15f);
+        vacio.addView(t2);
+        cabecera.addView(vacio);
+        lista.addHeaderView(cabecera, null, false);
+
+        adaptador = new android.widget.BaseAdapter() {
+            @Override public int getCount() { return recientes.size(); }
+            @Override public Object getItem(int i) { return recientes.get(i); }
+            @Override public long getItemId(int i) { return i; }
             @Override public View getView(int pos, View v, ViewGroup padre) {
-                v = super.getView(pos, v, padre);
-                JSONObject o = getItem(pos);
-                ((TextView) v.findViewById(android.R.id.text1)).setText(o.optString("nombre"));
+                Fila f = v != null ? (Fila) v.getTag() : new Fila();
+                JSONObject o = recientes.get(pos);
+                String nombre = o.optString("nombre");
+                f.insignia.setImageDrawable(TipoDoc.insignia(MainActivity.this, nombre));
+                f.nombre.setText(nombre);
                 int total = o.optInt("total"), pag = o.optInt("pagina") + 1;
                 String fecha = DateUtils.getRelativeTimeSpanString(o.optLong("fecha")).toString();
-                String tipo = tipo(o.optString("nombre"));
-                String detalle = (tipo.isEmpty() ? "" : tipo + " · ")
-                        + (total > 0 ? "Página " + pag + " de " + total + " · " : "") + fecha;
+                String tipo = TipoDoc.nombre(nombre);
                 boolean perdido = sinAcceso.contains(o.optString("uri"));
-                ((TextView) v.findViewById(android.R.id.text2))
-                        .setText(perdido ? "No disponible · tócalo para buscarlo" : detalle);
-                v.setAlpha(perdido ? 0.5f : 1f);
-                return v;
+                f.detalle.setText(perdido ? "No disponible · tócalo para buscarlo"
+                        : (tipo.isEmpty() ? "" : tipo + " · ") + (total > 0 ? "Pág. " + pag + " de " + total + " · " : "") + fecha);
+                f.raiz.setAlpha(perdido ? 0.55f : 1f);
+                f.opciones.setOnClickListener(x -> opciones(o));
+                return f.tarjeta;
             }
         };
         lista.setAdapter(adaptador);
-        lista.setOnItemClickListener((p, v, pos, id) -> abrirReciente(recientes.get(pos)));
+        lista.setOnItemClickListener((p, v, pos, id) -> {
+            Object o = p.getItemAtPosition(pos);
+            if (o instanceof JSONObject) abrirReciente((JSONObject) o);
+        });
         lista.setOnItemLongClickListener((p, v, pos, id) -> {
-            JSONObject o = recientes.get(pos);
-            new AlertDialog.Builder(this)
-                    .setTitle(o.optString("nombre"))
-                    .setItems(new String[] {"Quitar de recientes", "Buscar el archivo de nuevo…"}, (d, w) -> {
-                        if (w == 0) quitar(o);
-                        else buscarDeNuevo(o);
-                    })
-                    .show();
+            Object o = p.getItemAtPosition(pos);
+            if (o instanceof JSONObject) opciones((JSONObject) o);
             return true;
         });
-        raiz.addView(lista, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
-        setContentView(raiz);
+        setTitle("DocReader");
+        setContentView(lista);
         App.mostrarFalloAnterior(this);
+    }
+
+    /** Vistas de una fila de recientes: tarjeta con insignia de tipo, nombre, detalle y menú. */
+    private final class Fila {
+        final FrameLayout tarjeta = new FrameLayout(MainActivity.this);
+        final LinearLayout raiz = new LinearLayout(MainActivity.this);
+        final android.widget.ImageView insignia = new android.widget.ImageView(MainActivity.this);
+        final TextView nombre = new TextView(MainActivity.this), detalle = new TextView(MainActivity.this);
+        final android.widget.ImageButton opciones;
+
+        Fila() {
+            tarjeta.setTag(this);
+            tarjeta.setPadding(dp(16), dp(4), dp(16), dp(4));
+            raiz.setGravity(Gravity.CENTER_VERTICAL);
+            raiz.setBackground(Estilo.tocable(MainActivity.this, Estilo.superficie(MainActivity.this), dp(14)));
+            raiz.setPadding(dp(12), dp(10), dp(4), dp(10));
+            raiz.setDuplicateParentStateEnabled(true);
+            raiz.addView(insignia, new LinearLayout.LayoutParams(dp(44), dp(44)));
+            LinearLayout textos = new LinearLayout(MainActivity.this);
+            textos.setOrientation(LinearLayout.VERTICAL);
+            textos.setPadding(dp(14), 0, dp(4), 0);
+            nombre.setTextSize(15.5f);
+            nombre.setTextColor(Estilo.texto(MainActivity.this));
+            nombre.setSingleLine(true);
+            nombre.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+            detalle.setTextSize(13);
+            detalle.setTextColor(Estilo.texto2(MainActivity.this));
+            detalle.setSingleLine(true);
+            detalle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            detalle.setPadding(0, dp(2), 0, 0);
+            textos.addView(nombre);
+            textos.addView(detalle);
+            raiz.addView(textos, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            opciones = Estilo.icono(MainActivity.this, Icono.Tipo.MAS, "Opciones", null);
+            opciones.setFocusable(false); // si no, la fila deja de responder al toque
+            raiz.addView(opciones);
+            tarjeta.addView(raiz);
+        }
+    }
+
+    private void opciones(JSONObject o) {
+        new AlertDialog.Builder(this)
+                .setTitle(o.optString("nombre"))
+                .setItems(new String[] {"Abrir", "Buscar el archivo de nuevo…", "Quitar de recientes"}, (d, w) -> {
+                    if (w == 0) abrirReciente(o);
+                    else if (w == 1) buscarDeNuevo(o);
+                    else quitar(o);
+                })
+                .show();
+    }
+
+    private void confirmarBorrado() {
+        new AlertDialog.Builder(this)
+                .setTitle("Borrar recientes")
+                .setMessage("Se vaciará la lista y se borrarán las copias guardadas de los documentos abiertos "
+                        + "desde otras apps. Los archivos originales no se tocan.")
+                .setPositiveButton("Borrar", (d, w) -> borrarRecientes())
+                .setNegativeButton("Cancelar", null)
+                .show();
     }
 
     @Override protected void onResume() {
@@ -108,6 +192,7 @@ public final class MainActivity extends Activity {
         recientes.addAll(Recientes.lista(this));
         adaptador.notifyDataSetChanged();
         vacio.setVisibility(recientes.isEmpty() ? View.VISIBLE : View.GONE);
+        filaSeccion.setVisibility(recientes.isEmpty() ? View.GONE : View.VISIBLE);
         comprobarAcceso();
     }
 
@@ -129,28 +214,6 @@ public final class MainActivity extends Activity {
                 adaptador.notifyDataSetChanged();
             });
         }, "recientes").start();
-    }
-
-    /** Tipo de documento por la extensión, para la lista. */
-    private static String tipo(String nombre) {
-        int p = nombre == null ? -1 : nombre.lastIndexOf('.');
-        if (p < 0) return "";
-        String e = nombre.substring(p + 1).toLowerCase(java.util.Locale.ROOT);
-        switch (e) {
-            case "pdf": return "PDF";
-            case "doc": case "docx": case "docm": case "dotx": case "dotm": case "dot": return "Word";
-            case "xls": case "xlsx": case "xlsm": case "xltx": case "xltm": case "xlt": return "Excel";
-            case "ppt": case "pptx": case "pptm": case "pps": case "ppsx": case "ppsm": case "pot": case "potx": return "PowerPoint";
-            case "odt": case "ott": return "Documento ODF";
-            case "ods": case "ots": return "Hoja ODF";
-            case "odp": case "otp": case "odg": return "Presentación ODF";
-            case "epub": return "EPUB";
-            case "md": case "markdown": return "Markdown";
-            case "csv": case "tsv": return "CSV";
-            case "txt": case "log": return "Texto";
-            case "jpg": case "jpeg": case "png": case "gif": case "webp": case "bmp": case "heic": case "heif": case "avif": return "Imagen";
-            default: return e.length() <= 6 ? e.toUpperCase(java.util.Locale.ROOT) : "";
-        }
     }
 
     private void elegir() {
@@ -248,7 +311,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override public boolean onCreateOptionsMenu(android.view.Menu menu) {
-        menu.add(0, 1, 0, "Fusionar PDF…");
+        menu.add(0, 1, 0, "Unir varios PDF…");
         menu.add(0, 2, 0, "Borrar recientes…");
         return true;
     }
@@ -259,12 +322,7 @@ public final class MainActivity extends Activity {
             return true;
         }
         if (item.getItemId() == 2) {
-            new AlertDialog.Builder(this)
-                    .setMessage("Se vaciará la lista de recientes y se borrarán las copias guardadas de los "
-                            + "documentos abiertos desde otras apps. Los archivos originales no se tocan.")
-                    .setPositiveButton("Borrar", (d, w) -> borrarRecientes())
-                    .setNegativeButton("Cancelar", null)
-                    .show();
+            confirmarBorrado();
             return true;
         }
         return super.onOptionsItemSelected(item);

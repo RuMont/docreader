@@ -52,6 +52,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import com.docreader.Estilo;
+import com.docreader.Icono;
 import com.docreader.Impresion;
 import com.docreader.Recientes;
 
@@ -209,7 +211,7 @@ public final class OficinaActivity extends Activity {
     // Libros de Excel: una hoja visible cada vez, con pestañas abajo.
     private LinearLayout barraHojas, pestanas;
     private HorizontalScrollView desplazador;
-    private Button botonHojas;
+    private android.widget.ImageButton botonHojas;
     private int hojaActual;
 
     // --- API pública para la pantalla principal ---
@@ -312,11 +314,12 @@ public final class OficinaActivity extends Activity {
         // Barra de búsqueda (oculta hasta pulsar "Buscar").
         barraBusqueda = new LinearLayout(this);
         barraBusqueda.setGravity(Gravity.CENTER_VERTICAL);
-        barraBusqueda.setBackgroundColor(colorTema(android.R.attr.colorBackground));
-        barraBusqueda.setPadding(dp(8), 0, 0, 0);
+        barraBusqueda.setBackground(Estilo.barra(this, false));
+        barraBusqueda.setPadding(dp(12), dp(6), dp(4), dp(6));
         barraBusqueda.setVisibility(View.GONE);
         campo = new EditText(this);
         campo.setHint("Buscar en el documento");
+        Estilo.campo(this, campo);
         campo.setSingleLine(true);
         campo.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         campo.setOnEditorActionListener((v, accion, ev) -> {
@@ -327,32 +330,35 @@ public final class OficinaActivity extends Activity {
         contador = new TextView(this);
         contador.setPadding(dp(8), 0, dp(4), 0);
         barraBusqueda.addView(contador);
-        barraBusqueda.addView(botonPlano("▲", v -> saltar(false)));
-        barraBusqueda.addView(botonPlano("▼", v -> saltar(true)));
-        barraBusqueda.addView(botonPlano("✕", v -> cerrarBusqueda()));
+        barraBusqueda.addView(Estilo.icono(this, Icono.Tipo.ARRIBA, "Anterior", v -> saltar(false)));
+        barraBusqueda.addView(Estilo.icono(this, Icono.Tipo.ABAJO, "Siguiente", v -> saltar(true)));
+        barraBusqueda.addView(Estilo.icono(this, Icono.Tipo.CERRAR, "Cerrar", v -> cerrarBusqueda()));
         raiz.addView(barraBusqueda, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // Aviso de macros (oculto si el documento no las tiene).
         LinearLayout aviso = new LinearLayout(this);
         aviso.setGravity(Gravity.CENTER_VERTICAL);
-        aviso.setBackgroundColor(0xFFFFF4CE);
-        aviso.setPadding(dp(12), dp(2), 0, dp(2));
+        aviso.setBackgroundColor(Estilo.avisoFondo(this));
+        aviso.setPadding(dp(14), dp(2), 0, dp(2));
         aviso.setVisibility(View.GONE);
+        android.widget.ImageView iconoAviso = new android.widget.ImageView(this);
+        iconoAviso.setImageDrawable(new Icono(this, Icono.Tipo.CODIGO, Estilo.avisoTexto(this)));
+        aviso.addView(iconoAviso, new LinearLayout.LayoutParams(dp(20), dp(20)));
         TextView textoAviso = new TextView(this);
-        textoAviso.setText("Este documento contiene macros. DocReader no las ejecuta.");
-        textoAviso.setTextColor(0xFF5C4400);
+        textoAviso.setText("Contiene macros. DocReader no las ejecuta.");
+        textoAviso.setTextColor(Estilo.avisoTexto(this));
         textoAviso.setTextSize(13);
+        textoAviso.setPadding(dp(10), 0, 0, 0);
         aviso.addView(textoAviso, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         Button verCodigo = botonPlano("Ver código", v -> verMacros());
-        verCodigo.setTextColor(0xFF5C4400);
+        verCodigo.setTextColor(Estilo.avisoTexto(this));
         aviso.addView(verCodigo);
-        Button cerrarAviso = botonPlano("✕", v -> {
+        android.widget.ImageButton cerrarAviso = Estilo.icono(this, Icono.Tipo.CERRAR, "Cerrar aviso", v -> {
             avisoCerrado = true;
             actualizarAvisoMacros();
         });
-        cerrarAviso.setTextColor(0xFF5C4400);
-        cerrarAviso.setContentDescription("Cerrar aviso");
+        cerrarAviso.setImageDrawable(new Icono(this, Icono.Tipo.CERRAR, Estilo.avisoTexto(this)));
         aviso.addView(cerrarAviso);
         avisoMacros = aviso;
         raiz.addView(aviso, new LinearLayout.LayoutParams(
@@ -407,8 +413,7 @@ public final class OficinaActivity extends Activity {
         // Pestañas de hojas (solo en libros con varias hojas).
         barraHojas = new LinearLayout(this);
         barraHojas.setGravity(Gravity.CENTER_VERTICAL);
-        barraHojas.setBackgroundColor(colorTema(android.R.attr.colorBackground));
-        barraHojas.setElevation(dp(6));
+        barraHojas.setBackground(Estilo.barra(this, true));
         barraHojas.setVisibility(View.GONE);
         desplazador = new HorizontalScrollView(this);
         desplazador.setHorizontalScrollBarEnabled(false);
@@ -418,8 +423,7 @@ public final class OficinaActivity extends Activity {
         desplazador.addView(pestanas, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         barraHojas.addView(desplazador, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        botonHojas = botonPlano("☰", v -> selectorHojas());
-        botonHojas.setContentDescription("Todas las hojas");
+        botonHojas = Estilo.icono(this, Icono.Tipo.LISTA, "Todas las hojas", v -> selectorHojas());
         botonHojas.setVisibility(View.GONE);
         barraHojas.addView(botonHojas);
         // El selector solo aparece si las pestañas no caben en el ancho de la pantalla.
@@ -1265,18 +1269,15 @@ public final class OficinaActivity extends Activity {
     }
 
     private void marcarPestana() {
-        int acento = colorTema(android.R.attr.colorAccent);
+        int acento = Estilo.acento(this);
         for (int k = 0; k < pestanas.getChildCount(); k++) {
             TextView t = (TextView) pestanas.getChildAt(k);
             boolean activa = k == hojaActual;
-            t.setTypeface(null, activa ? Typeface.BOLD : Typeface.NORMAL);
-            t.setTextColor(activa ? acento : colorTexto());
-            t.setAlpha(activa ? 1f : 0.75f);
+            t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL), activa ? Typeface.BOLD : Typeface.NORMAL);
+            t.setTextColor(activa ? acento : Estilo.texto2(this));
+            t.setAlpha(1f);
             if (activa) {
-                GradientDrawable fondo = new GradientDrawable();
-                fondo.setColor((acento & 0x00FFFFFF) | 0x26000000);
-                fondo.setCornerRadius(dp(18));
-                t.setBackground(fondo);
+                t.setBackground(Estilo.redondo(Estilo.acentoSuave(this), dp(18)));
                 // Centrar la pestaña activa en la barra.
                 desplazador.post(() -> desplazador.smoothScrollTo(
                         t.getLeft() - (desplazador.getWidth() - t.getWidth()) / 2, 0));
@@ -1355,7 +1356,7 @@ public final class OficinaActivity extends Activity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(0, dp(8), 0, dp(8));
         GradientDrawable fondo = new GradientDrawable();
-        fondo.setColor(colorTema(android.R.attr.colorBackground));
+        fondo.setColor(Estilo.superficie(this));
         float r = dp(20);
         fondo.setCornerRadii(new float[] {r, r, r, r, 0, 0, 0, 0});
         panel.setBackground(fondo);
@@ -1735,12 +1736,7 @@ public final class OficinaActivity extends Activity {
     }
 
     private Button botonPlano(String texto, View.OnClickListener l) {
-        Button b = new Button(this, null, android.R.attr.borderlessButtonStyle);
-        b.setText(texto);
-        b.setMinWidth(dp(44));
-        b.setMinimumWidth(dp(44));
-        b.setOnClickListener(l);
-        return b;
+        return Estilo.textoBoton(this, texto, l);
     }
 
     private void teclado(boolean mostrar) {

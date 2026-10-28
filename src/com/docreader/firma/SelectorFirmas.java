@@ -65,7 +65,8 @@ public final class SelectorFirmas {
         LinearLayout textos = new LinearLayout(c);
         textos.setOrientation(LinearLayout.VERTICAL);
         FrameLayout papel = new FrameLayout(c);
-        papel.setBackgroundColor(0xFFFFFFFF);
+        papel.setBackground(com.docreader.Estilo.redondo(0xFFFFFFFF, 10 * d));
+        papel.setClipToOutline(true);
         papel.addView(new Miniatura(c, t));
         textos.addView(papel, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(64 * d)));
         TextView nombre = new TextView(c);
@@ -74,14 +75,9 @@ public final class SelectorFirmas {
         textos.addView(nombre);
         fila.addView(textos, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
-        Button mas = new Button(c, null, android.R.attr.borderlessButtonStyle);
-        mas.setText("⋮");
-        mas.setTextSize(20);
-        mas.setMinWidth(Math.round(44 * d));
-        mas.setMinimumWidth(Math.round(44 * d));
-        mas.setContentDescription("Opciones de " + t.nombre);
+        android.widget.ImageButton mas = com.docreader.Estilo.icono(c, com.docreader.Icono.Tipo.MAS,
+                "Opciones de " + t.nombre, v -> menu.run());
         mas.setFocusable(false);
-        mas.setOnClickListener(v -> menu.run());
         fila.addView(mas);
         return fila;
     }

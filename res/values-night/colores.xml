@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="fondo">#141415</color>
+    <color name="superficie">#1C1C1E</color>
+    <color name="linea">#2E2E32</color>
+    <color name="texto">#ECECEE</color>
+    <color name="texto2">#9A9AA0</color>
+    <color name="acento">#A9BDD1</color>
+    <color name="onda">#1FFFFFFF</color>
+    <bool name="barras_claras">false</bool>
+</resources>

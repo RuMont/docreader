@@ -33,14 +33,17 @@ public final class CrearFirmaActivity extends Activity {
 
         LinearLayout raiz = new LinearLayout(this);
         raiz.setOrientation(LinearLayout.VERTICAL);
-        raiz.setBackgroundColor(colorTema(android.R.attr.colorBackground));
+        raiz.setBackgroundColor(com.docreader.Estilo.fondo(this));
 
         LinearLayout barra = new LinearLayout(this);
         barra.setGravity(Gravity.CENTER_VERTICAL);
-        barra.setPadding(dp(16), 0, m, 0);
+        barra.setPadding(dp(16), dp(4), dp(12), dp(4));
+        barra.setBackground(com.docreader.Estilo.barra(this, false));
         TextView titulo = new TextView(this);
         titulo.setText("Nueva firma");
         titulo.setTextSize(18);
+        titulo.setTextColor(com.docreader.Estilo.texto(this));
+        titulo.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
         barra.addView(titulo, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         barra.addView(muestra("Negro", Trazo.NEGRO));
         barra.addView(muestra("Azul", Trazo.AZUL));
@@ -49,13 +52,19 @@ public final class CrearFirmaActivity extends Activity {
         barra.addView(deshacer);
         barra.addView(borrar);
         barra.addView(plano("Cancelar", v -> finish()));
-        barra.addView(plano("Guardar", v -> guardar()));
+        Button guardar = com.docreader.Estilo.principal(this, "Guardar", null, v -> guardar());
+        guardar.setMinHeight(dp(40));
+        guardar.setMinimumHeight(dp(40));
+        LinearLayout.LayoutParams lpG = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lpG.leftMargin = dp(6);
+        barra.addView(guardar, lpG);
         raiz.addView(barra);
 
         panel = new PanelFirma(this);
         panel.setAlCambiar(this::actualizarBotones);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1);
-        lp.setMargins(m, 0, m, m);
+        lp.setMargins(dp(12), dp(12), dp(12), dp(12));
         raiz.addView(panel, lp);
 
         setContentView(raiz);
@@ -78,6 +87,8 @@ public final class CrearFirmaActivity extends Activity {
         boolean hay = !panel.vacio();
         deshacer.setEnabled(hay);
         borrar.setEnabled(hay);
+        deshacer.setAlpha(hay ? 1f : 0.4f);
+        borrar.setAlpha(hay ? 1f : 0.4f);
     }
 
     /** Botón redondo de color para elegir la tinta. */
@@ -97,10 +108,7 @@ public final class CrearFirmaActivity extends Activity {
     }
 
     private Button plano(String texto, View.OnClickListener l) {
-        Button b = new Button(this, null, android.R.attr.borderlessButtonStyle);
-        b.setText(texto);
-        b.setOnClickListener(l);
-        return b;
+        return com.docreader.Estilo.textoBoton(this, texto, l);
     }
 
     private void pantallaCompleta() {

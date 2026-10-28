@@ -114,7 +114,6 @@ public final class LectorActivity extends Activity implements VistaPdf.Oyente {
     }
 
     private void construirInterfaz() {
-        int fondo = (colorTema(android.R.attr.colorBackground) & 0x00FFFFFF) | 0xF0000000;
         FrameLayout raiz = new FrameLayout(this);
 
         vista = new VistaPdf(this);
@@ -130,11 +129,12 @@ public final class LectorActivity extends Activity implements VistaPdf.Oyente {
         // Barra de búsqueda (oculta hasta pulsar "Buscar").
         barraBusqueda = new LinearLayout(this);
         barraBusqueda.setGravity(Gravity.CENTER_VERTICAL);
-        barraBusqueda.setBackgroundColor(fondo);
-        barraBusqueda.setPadding(dp(8), 0, 0, 0);
+        barraBusqueda.setBackground(Estilo.barra(this, false));
+        barraBusqueda.setPadding(dp(12), dp(6), dp(4), dp(6));
         barraBusqueda.setVisibility(View.GONE);
         campo = new EditText(this);
         campo.setHint("Buscar en el documento");
+        Estilo.campo(this, campo);
         campo.setSingleLine(true);
         campo.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         campo.setOnEditorActionListener((v, accion, ev) -> {
@@ -145,20 +145,20 @@ public final class LectorActivity extends Activity implements VistaPdf.Oyente {
         contador = new TextView(this);
         contador.setPadding(dp(8), 0, dp(4), 0);
         barraBusqueda.addView(contador);
-        barraBusqueda.addView(botonPlano("▲", v -> saltar(-1)));
-        barraBusqueda.addView(botonPlano("▼", v -> saltar(1)));
-        barraBusqueda.addView(botonPlano("✕", v -> cerrarBusqueda()));
+        barraBusqueda.addView(Estilo.icono(this, Icono.Tipo.ARRIBA, "Anterior", v -> saltar(-1)));
+        barraBusqueda.addView(Estilo.icono(this, Icono.Tipo.ABAJO, "Siguiente", v -> saltar(1)));
+        barraBusqueda.addView(Estilo.icono(this, Icono.Tipo.CERRAR, "Cerrar", v -> cerrarBusqueda()));
         // Aviso (PDF escaneado, progreso del OCR…).
         aviso = new LinearLayout(this);
         aviso.setGravity(Gravity.CENTER_VERTICAL);
-        aviso.setBackgroundColor(fondo);
+        aviso.setBackground(Estilo.barra(this, false));
         aviso.setPadding(dp(16), dp(4), dp(4), dp(4));
         aviso.setVisibility(View.GONE);
         avisoTexto = new TextView(this);
         aviso.addView(avisoTexto, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         avisoBoton = botonPlano("", null);
         aviso.addView(avisoBoton);
-        aviso.addView(botonPlano("✕", v -> {
+        aviso.addView(Estilo.icono(this, Icono.Tipo.CERRAR, "Cerrar", v -> {
             if (ocrEnCurso) cancelarOcr();
             aviso.setVisibility(View.GONE);
         }));
@@ -175,7 +175,7 @@ public final class LectorActivity extends Activity implements VistaPdf.Oyente {
         // Barra inferior para saltar rápido por el documento.
         barraInferior = new LinearLayout(this);
         barraInferior.setGravity(Gravity.CENTER_VERTICAL);
-        barraInferior.setBackgroundColor(fondo);
+        barraInferior.setBackground(Estilo.barra(this, true));
         barraInferior.setPadding(dp(4), dp(10), dp(16), dp(10));
         barra = new SeekBar(this);
         barra.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -188,6 +188,7 @@ public final class LectorActivity extends Activity implements VistaPdf.Oyente {
         barraInferior.addView(barra, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         etiqueta = new TextView(this);
         etiqueta.setOnClickListener(v -> dialogoIrA());
+        etiqueta.setTextColor(Estilo.texto2(this));
         barraInferior.addView(etiqueta);
         raiz.addView(barraInferior, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
@@ -195,7 +196,7 @@ public final class LectorActivity extends Activity implements VistaPdf.Oyente {
         // Barra mientras se coloca una firma.
         barraFirma = new LinearLayout(this);
         barraFirma.setOrientation(LinearLayout.VERTICAL);
-        barraFirma.setBackgroundColor(fondo);
+        barraFirma.setBackground(Estilo.barra(this, true));
         barraFirma.setPadding(dp(16), dp(8), dp(8), dp(4));
         barraFirma.setVisibility(View.GONE);
         TextView ayuda = new TextView(this);
@@ -357,7 +358,7 @@ public final class LectorActivity extends Activity implements VistaPdf.Oyente {
         menu.add(0, M_FIRMAR, 0, "Firmar…");
         android.view.SubMenu h = menu.addSubMenu("Herramientas PDF");
         h.add(0, M_DIVIDIR, 0, "Dividir o extraer páginas…");
-        h.add(0, M_FUSIONAR, 0, "Fusionar con otros PDF…");
+        h.add(0, M_FUSIONAR, 0, "Unir con otros PDF…");
         h.add(0, M_IMAGENES, 0, "Convertir a imágenes…");
         h.add(0, M_DOCX, 0, "Convertir a Word (.docx)…");
         if (clavePdf == null) h.add(0, M_PROTEGER, 0, "Proteger con contraseña…");
@@ -1034,12 +1035,7 @@ public final class LectorActivity extends Activity implements VistaPdf.Oyente {
     }
 
     private Button botonPlano(String texto, View.OnClickListener l) {
-        Button b = new Button(this, null, android.R.attr.borderlessButtonStyle);
-        b.setText(texto);
-        b.setMinWidth(dp(44));
-        b.setMinimumWidth(dp(44));
-        b.setOnClickListener(l);
-        return b;
+        return Estilo.textoBoton(this, texto, l);
     }
 
     private View conMargen(View v) {

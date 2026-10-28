@@ -47,7 +47,7 @@ public final class FusionarActivity extends Activity {
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
-        setTitle("Fusionar PDF");
+        setTitle("Unir PDF");
         Uri inicial = getIntent().getData();
         if (inicial != null) {
             String n = getIntent().getStringExtra(EXTRA_NOMBRE);
@@ -82,12 +82,11 @@ public final class FusionarActivity extends Activity {
 
         LinearLayout botones = new LinearLayout(this);
         botones.setGravity(Gravity.END);
-        botones.setPadding(dp(8), dp(4), dp(8), dp(8));
-        Button anadir = new Button(this, null, android.R.attr.borderlessButtonStyle);
-        anadir.setText("Añadir PDF");
-        anadir.setOnClickListener(v -> elegir());
-        unir = new Button(this);
-        unir.setText("Fusionar");
+        botones.setPadding(dp(12), dp(10), dp(16), dp(12));
+        botones.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        botones.setBackground(com.docreader.Estilo.barra(this, true));
+        Button anadir = com.docreader.Estilo.textoBoton(this, "Añadir PDF", v -> elegir());
+        unir = com.docreader.Estilo.principal(this, "Unir", null, null);
         unir.setOnClickListener(v -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
                 .addCategory(Intent.CATEGORY_OPENABLE).setType("application/pdf")
                 .putExtra(Intent.EXTRA_TITLE, Tarea.base(lista.get(0).nombre) + "_fusionado.pdf"), GUARDAR));
@@ -104,10 +103,11 @@ public final class FusionarActivity extends Activity {
         Entrada e = lista.get(i);
         LinearLayout f = new LinearLayout(this);
         f.setGravity(Gravity.CENTER_VERTICAL);
-        f.setPadding(dp(16), dp(4), dp(4), dp(4));
+        f.setPadding(dp(16), dp(6), dp(4), dp(6));
         TextView t = new TextView(this);
         t.setText((i + 1) + ".  " + e.nombre);
-        t.setTextSize(16);
+        t.setTextSize(15.5f);
+        t.setTextColor(com.docreader.Estilo.texto(this));
         t.setMaxLines(2);
         f.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         f.addView(boton("↑", "Subir", i > 0, () -> mover(i, i - 1)));
@@ -119,14 +119,12 @@ public final class FusionarActivity extends Activity {
         return f;
     }
 
-    private Button boton(String texto, String descripcion, boolean activo, Runnable r) {
-        Button b = new Button(this, null, android.R.attr.borderlessButtonStyle);
-        b.setText(texto);
-        b.setContentDescription(descripcion);
-        b.setMinWidth(dp(44));
-        b.setMinimumWidth(dp(44));
+    private View boton(String texto, String descripcion, boolean activo, Runnable r) {
+        com.docreader.Icono.Tipo t = texto.equals("↑") ? com.docreader.Icono.Tipo.ARRIBA
+                : texto.equals("↓") ? com.docreader.Icono.Tipo.ABAJO : com.docreader.Icono.Tipo.CERRAR;
+        android.widget.ImageButton b = com.docreader.Estilo.icono(this, t, descripcion, v -> r.run());
         b.setEnabled(activo);
-        b.setOnClickListener(v -> r.run());
+        b.setAlpha(activo ? 1f : 0.3f);
         return b;
     }
 
@@ -138,6 +136,7 @@ public final class FusionarActivity extends Activity {
     private void actualizar() {
         adaptador.notifyDataSetChanged();
         unir.setEnabled(lista.size() >= 2);
+        unir.setAlpha(lista.size() >= 2 ? 1f : 0.4f);
         vacio.setVisibility(lista.size() < 2 ? View.VISIBLE : View.GONE);
     }
 

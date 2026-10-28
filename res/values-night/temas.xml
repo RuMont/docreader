@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Tema.Padre" parent="android:Theme.Material" />
+    <style name="Tema.BarraPadre" parent="android:Widget.Material.ActionBar.Solid" />
+    <style name="Tema.DialogoPadre" parent="android:Theme.Material.Dialog.Alert" />
+</resources>

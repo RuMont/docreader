@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Padres claros; values-night los cambia por los oscuros. -->
+    <style name="Tema.Padre" parent="android:Theme.Material.Light" />
+    <style name="Tema.BarraPadre" parent="android:Widget.Material.Light.ActionBar.Solid" />
+    <style name="Tema.DialogoPadre" parent="android:Theme.Material.Light.Dialog.Alert" />
+
+    <style name="Tema" parent="Tema.Padre">
+        <item name="android:colorPrimary">@color/superficie</item>
+        <item name="android:colorPrimaryDark">@color/superficie</item>
+        <item name="android:colorAccent">@color/acento</item>
+        <item name="android:colorControlActivated">@color/acento</item>
+        <item name="android:colorControlNormal">@color/texto2</item>
+        <item name="android:colorControlHighlight">@color/onda</item>
+        <item name="android:colorBackground">@color/fondo</item>
+        <item name="android:colorBackgroundFloating">@color/superficie</item>
+        <item name="android:windowBackground">@color/fondo</item>
+        <item name="android:textColorPrimary">@color/texto</item>
+        <item name="android:textColorSecondary">@color/texto2</item>
+        <item name="android:statusBarColor">@color/superficie</item>
+        <item name="android:navigationBarColor">@color/superficie</item>
+        <item name="android:windowLightStatusBar">@bool/barras_claras</item>
+        <item name="android:windowLightNavigationBar">@bool/barras_claras</item>
+        <item name="android:actionBarStyle">@style/Tema.Barra</item>
+        <item name="android:alertDialogTheme">@style/Tema.Dialogo</item>
+        <item name="android:dialogCornerRadius">20dp</item>
+        <item name="android:buttonCornerRadius">12dp</item>
+    </style>
+
+    <style name="Tema.Barra" parent="Tema.BarraPadre">
+        <item name="android:background">@drawable/fondo_barra</item>
+        <item name="android:elevation">0dp</item>
+        <item name="android:titleTextStyle">@style/Tema.Titulo</item>
+    </style>
+
+    <style name="Tema.Titulo" parent="android:TextAppearance.Material.Widget.ActionBar.Title">
+        <item name="android:textColor">@color/texto</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textSize">19sp</item>
+    </style>
+
+    <style name="Tema.Dialogo" parent="Tema.DialogoPadre">
+        <item name="android:colorAccent">@color/acento</item>
+        <item name="android:colorControlActivated">@color/acento</item>
+        <item name="android:colorBackground">@color/superficie</item>
+        <item name="android:textColorPrimary">@color/texto</item>
+        <item name="android:textColorSecondary">@color/texto2</item>
+        <item name="android:dialogCornerRadius">20dp</item>
+    </style>
+</resources>

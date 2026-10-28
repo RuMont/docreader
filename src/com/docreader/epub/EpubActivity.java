@@ -65,6 +65,8 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.docreader.Estilo;
+import com.docreader.Icono;
 import com.docreader.Impresion;
 import com.docreader.Recientes;
 
@@ -189,11 +191,12 @@ public final class EpubActivity extends Activity {
         // Barra de búsqueda (oculta hasta pulsar "Buscar").
         barraBusqueda = new LinearLayout(this);
         barraBusqueda.setGravity(Gravity.CENTER_VERTICAL);
-        barraBusqueda.setBackgroundColor(colorTema(android.R.attr.colorBackground));
-        barraBusqueda.setPadding(dp(8), 0, 0, 0);
+        barraBusqueda.setBackground(Estilo.barra(this, false));
+        barraBusqueda.setPadding(dp(12), dp(6), dp(4), dp(6));
         barraBusqueda.setVisibility(View.GONE);
         campo = new EditText(this);
         campo.setHint("Buscar en el capítulo");
+        Estilo.campo(this, campo);
         campo.setSingleLine(true);
         campo.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         campo.setOnEditorActionListener((v, accion, ev) -> {
@@ -205,9 +208,9 @@ public final class EpubActivity extends Activity {
         contador.setPadding(dp(8), 0, dp(4), 0);
         contador.setMaxWidth(dp(150));
         barraBusqueda.addView(contador);
-        barraBusqueda.addView(botonPlano("▲", v -> saltar(false)));
-        barraBusqueda.addView(botonPlano("▼", v -> saltar(true)));
-        barraBusqueda.addView(botonPlano("✕", v -> cerrarBusqueda()));
+        barraBusqueda.addView(Estilo.icono(this, Icono.Tipo.ARRIBA, "Anterior", v -> saltar(false)));
+        barraBusqueda.addView(Estilo.icono(this, Icono.Tipo.ABAJO, "Siguiente", v -> saltar(true)));
+        barraBusqueda.addView(Estilo.icono(this, Icono.Tipo.CERRAR, "Cerrar", v -> cerrarBusqueda()));
         raiz.addView(barraBusqueda, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -226,7 +229,7 @@ public final class EpubActivity extends Activity {
         // Barra inferior: anterior, capítulo actual (abre el índice) y siguiente.
         barraNav = new LinearLayout(this);
         barraNav.setGravity(Gravity.CENTER_VERTICAL);
-        barraNav.setBackgroundColor(colorTema(android.R.attr.colorBackground));
+        barraNav.setBackground(Estilo.barra(this, true));
         barraNav.setElevation(dp(6));
         barraNav.setPadding(dp(2), dp(2), dp(2), dp(2));
         barraNav.setVisibility(View.GONE);
@@ -716,7 +719,7 @@ public final class EpubActivity extends Activity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(0, dp(8), 0, dp(8));
         GradientDrawable fondo = new GradientDrawable();
-        fondo.setColor(colorTema(android.R.attr.colorBackground));
+        fondo.setColor(Estilo.superficie(this));
         float r = dp(20);
         fondo.setCornerRadii(new float[] {r, r, r, r, 0, 0, 0, 0});
         panel.setBackground(fondo);
@@ -738,7 +741,7 @@ public final class EpubActivity extends Activity {
         titulo.setPadding(dp(20), dp(4), dp(20), dp(8));
         panel.addView(titulo);
 
-        final int acento = colorTema(android.R.attr.colorAccent);
+        final int acento = Estilo.acento(this);
         final int texto = colorTexto();
         ListView lista = new ListView(this);
         lista.setAdapter(new ArrayAdapter<Libro.Entrada>(this, android.R.layout.simple_list_item_1, entradas) {
@@ -757,7 +760,7 @@ public final class EpubActivity extends Activity {
                 t.setTextColor(activa ? acento : texto);
                 t.setAlpha(e.ruta == null ? 0.6f : 1f);
                 if (activa) {
-                    t.setBackgroundColor((acento & 0x00FFFFFF) | 0x1F000000);
+                    t.setBackgroundColor(Estilo.acentoSuave(EpubActivity.this));
                 } else {
                     t.setBackground(null);
                 }
@@ -974,13 +977,7 @@ public final class EpubActivity extends Activity {
     }
 
     private Button botonPlano(String texto, View.OnClickListener l) {
-        Button b = new Button(this, null, android.R.attr.borderlessButtonStyle);
-        b.setText(texto);
-        b.setAllCaps(false);
-        b.setMinWidth(dp(44));
-        b.setMinimumWidth(dp(44));
-        b.setOnClickListener(l);
-        return b;
+        return Estilo.textoBoton(this, texto, l);
     }
 
     private void teclado(boolean mostrar) {

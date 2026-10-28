@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Paleta neutra (misma que Estilo.java). Modo oscuro en values-night. -->
 <resources>
-    <color name="fondo_icono">#D93025</color>
+    <color name="fondo_icono">#2F3A44</color>
+    <color name="fondo">#F6F6F4</color>
+    <color name="superficie">#FFFFFF</color>
+    <color name="linea">#E3E3DF</color>
+    <color name="texto">#1D1D1F</color>
+    <color name="texto2">#6E6E73</color>
+    <color name="acento">#44617B</color>
+    <color name="onda">#14000000</color>
+    <bool name="barras_claras">true</bool>
 </resources>
