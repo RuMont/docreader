@@ -52,10 +52,13 @@ public final class Copias extends ContentProvider {
     static Uri conservar(Context c, Uri original, int flags, String nombre) {
         if (original == null || esCopia(original) || "file".equals(original.getScheme())) return null;
         if ((flags & Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) != 0) {
-            try {
-                c.getContentResolver().takePersistableUriPermission(original, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                return null;
-            } catch (SecurityException ignorado) { }
+            int modo = flags & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            for (int m : new int[] {modo, Intent.FLAG_GRANT_READ_URI_PERMISSION}) {
+                try {
+                    c.getContentResolver().takePersistableUriPermission(original, m);
+                    return null;
+                } catch (SecurityException ignorado) { }
+            }
         }
         if (permanente(c, original)) return null;
         String seguro = nombre == null || nombre.trim().isEmpty() ? "documento"

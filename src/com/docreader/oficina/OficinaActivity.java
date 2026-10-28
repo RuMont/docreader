@@ -52,11 +52,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import com.docreader.EliminarActivity;
 import com.docreader.Estilo;
 import com.docreader.Icono;
 import com.docreader.Impresion;
-import com.docreader.Estilo;
-import com.docreader.Icono;
 import com.docreader.MenuPanel;
 import com.docreader.Recientes;
 
@@ -1437,6 +1436,10 @@ public final class OficinaActivity extends Activity {
     }
 
     @Override protected void onActivityResult(int pedido, int resultado, Intent datos) {
+        if (pedido == EliminarActivity.PEDIDO) {
+            if (resultado == RESULT_OK) finish(); // el archivo ya no existe
+            return;
+        }
         if (resultado != RESULT_OK || datos == null || datos.getData() == null) return;
         if (pedido == GUARDAR_PROTEGIDO || pedido == GUARDAR_SIN_CLAVE) {
             guardarCopia(datos.getData(), pedido == GUARDAR_PROTEGIDO);
@@ -1641,6 +1644,10 @@ public final class OficinaActivity extends Activity {
         }
         if (original != null || documento != null) n.accion(Icono.Tipo.IMPRESORA, "Imprimir…", () -> accion(M_IMPRIMIR));
         n.accion(Icono.Tipo.COMPARTIR, "Compartir", () -> accion(M_COMPARTIR));
+        if (!modoMacros) {
+            n.accion(Icono.Tipo.PAPELERA, EliminarActivity.etiqueta(this, uri), () -> startActivityForResult(
+                    EliminarActivity.intent(this, uri, nombre), EliminarActivity.PEDIDO));
+        }
         MenuPanel.mostrar(this, n);
     }
 

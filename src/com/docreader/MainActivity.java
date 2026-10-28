@@ -168,10 +168,12 @@ public final class MainActivity extends Activity {
     private void opciones(JSONObject o) {
         new AlertDialog.Builder(this)
                 .setTitle(o.optString("nombre"))
-                .setItems(new String[] {"Abrir", "Buscar el archivo de nuevo…", "Quitar de recientes"}, (d, w) -> {
+                .setItems(new String[] {"Abrir", "Buscar el archivo de nuevo…", "Quitar de recientes",
+                        EliminarActivity.etiqueta(this, Uri.parse(o.optString("uri")))}, (d, w) -> {
                     if (w == 0) abrirReciente(o);
                     else if (w == 1) buscarDeNuevo(o);
-                    else quitar(o);
+                    else if (w == 2) quitar(o);
+                    else startActivity(EliminarActivity.intent(this, Uri.parse(o.optString("uri")), o.optString("nombre")));
                 })
                 .show();
     }
@@ -231,10 +233,15 @@ public final class MainActivity extends Activity {
             return;
         }
         Uri uri = datos.getData();
+        // Permiso permanente para poder reabrirlo desde "Recientes" (y escritura, para poder eliminarlo).
+        int concedido = datos.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
         try {
-            // Permiso permanente para poder reabrirlo desde "Recientes".
-            getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        } catch (SecurityException ignorado) { }
+            getContentResolver().takePersistableUriPermission(uri, concedido);
+        } catch (SecurityException e) {
+            try {
+                getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } catch (SecurityException ignorado) { }
+        }
         if (pedido == BUSCAR_DE_NUEVO && buscando != null) {
             Recientes.reemplazar(this, buscando, uri); // conserva la página en la que se iba
             buscando = null;

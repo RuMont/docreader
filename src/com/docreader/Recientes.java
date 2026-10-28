@@ -46,6 +46,13 @@ public final class Recientes {
         return -1;
     }
 
+    /** URI del archivo original de una entrada (si "uri" es su copia privada); si no, la misma. */
+    static synchronized Uri original(Context c, Uri uri) {
+        JSONArray a = leer(c);
+        int i = indice(a, uri);
+        return i < 0 ? uri : Uri.parse(a.optJSONObject(i).optString("uri"));
+    }
+
     /** URI con la que se abre la entrada: la copia privada si la tiene. */
     public static Uri abrible(JSONObject o) {
         String copia = o.optString("copia", null);

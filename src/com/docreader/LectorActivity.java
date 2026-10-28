@@ -452,7 +452,9 @@ public final class LectorActivity extends Activity implements VistaPdf.Oyente {
                 .submenu(Icono.Tipo.OJO, "Vista", () -> new MenuPanel.Nivel("Vista")
                         .interruptor(Icono.Tipo.LUNA, "Modo noche", noche, v -> accion(M_NOCHE)))
                 .accion(Icono.Tipo.IMPRESORA, "Imprimir…", () -> accion(M_IMPRIMIR))
-                .accion(Icono.Tipo.COMPARTIR, "Compartir", () -> accion(M_COMPARTIR));
+                .accion(Icono.Tipo.COMPARTIR, "Compartir", () -> accion(M_COMPARTIR))
+                .accion(Icono.Tipo.PAPELERA, EliminarActivity.etiqueta(this, uri), () -> startActivityForResult(
+                        EliminarActivity.intent(this, uri, getTitle().toString()), EliminarActivity.PEDIDO));
         MenuPanel.mostrar(this, n);
     }
 
@@ -962,6 +964,10 @@ public final class LectorActivity extends Activity implements VistaPdf.Oyente {
     }
 
     @Override protected void onActivityResult(int pedido, int resultado, Intent datos) {
+        if (pedido == EliminarActivity.PEDIDO) {
+            if (resultado == RESULT_OK) finish(); // el archivo ya no existe
+            return;
+        }
         if (herramientas != null && herramientas.alResultado(pedido, resultado, datos)) return;
         if (resultado != RESULT_OK || datos == null) return;
         if (pedido == CREAR_FIRMA) {

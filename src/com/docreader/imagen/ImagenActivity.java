@@ -34,6 +34,7 @@ import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import com.docreader.Impresion;
+import com.docreader.EliminarActivity;
 import com.docreader.Estilo;
 import com.docreader.Icono;
 import com.docreader.MenuPanel;
@@ -342,8 +343,14 @@ public final class ImagenActivity extends Activity implements VistaImagen.Oyente
                 .accion(Icono.Tipo.INFO, "Información", () -> accion(M_INFO)).activo(lista)
                 .accion(Icono.Tipo.IMPRESORA, "Imprimir…", () -> accion(M_IMPRIMIR)).activo(lista)
                 .accion(Icono.Tipo.COMPARTIR, "Compartir", () -> accion(M_COMPARTIR))
-                .accion(Icono.Tipo.ABRIR_CON, "Abrir con…", () -> accion(M_ABRIR_CON));
+                .accion(Icono.Tipo.ABRIR_CON, "Abrir con…", () -> accion(M_ABRIR_CON))
+                .accion(Icono.Tipo.PAPELERA, EliminarActivity.etiqueta(this, uri), () -> startActivityForResult(
+                        EliminarActivity.intent(this, uri, nombre), EliminarActivity.PEDIDO));
         MenuPanel.mostrar(this, n);
+    }
+
+    @Override protected void onActivityResult(int pedido, int resultado, Intent datos) {
+        if (pedido == EliminarActivity.PEDIDO && resultado == RESULT_OK) finish(); // el archivo ya no existe
     }
 
     /**

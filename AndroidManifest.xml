@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.docreader"
-    android:versionCode="21"
+    android:versionCode="22"
     android:versionName="1.0.0">
 
     <!-- Sin permisos: la app no puede acceder a Internet. -->
@@ -96,6 +96,12 @@
         </activity>
 
         <activity android:name=".LectorActivity" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
+        <activity
+            android:name=".EliminarActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@style/Tema.Transparente" />
         <provider
             android:name=".Copias"
             android:authorities="com.docreader.copias"

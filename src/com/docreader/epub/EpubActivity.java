@@ -65,11 +65,10 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.docreader.EliminarActivity;
 import com.docreader.Estilo;
 import com.docreader.Icono;
 import com.docreader.Impresion;
-import com.docreader.Estilo;
-import com.docreader.Icono;
 import com.docreader.MenuPanel;
 import com.docreader.Recientes;
 
@@ -924,8 +923,14 @@ public final class EpubActivity extends Activity {
                         .interruptor(Icono.Tipo.LUNA, "Modo noche", noche, x -> accion(M_NOCHE))
                         .accion(Icono.Tipo.LETRA, "Tamaño de letra…", () -> accion(M_LETRA)))
                 .accion(Icono.Tipo.IMPRESORA, "Imprimir capítulo…", () -> accion(M_IMPRIMIR))
-                .accion(Icono.Tipo.COMPARTIR, "Compartir", () -> accion(M_COMPARTIR));
+                .accion(Icono.Tipo.COMPARTIR, "Compartir", () -> accion(M_COMPARTIR))
+                .accion(Icono.Tipo.PAPELERA, EliminarActivity.etiqueta(this, uri), () -> startActivityForResult(
+                        EliminarActivity.intent(this, uri, nombre), EliminarActivity.PEDIDO));
         MenuPanel.mostrar(this, n);
+    }
+
+    @Override protected void onActivityResult(int pedido, int resultado, Intent datos) {
+        if (pedido == EliminarActivity.PEDIDO && resultado == RESULT_OK) finish(); // el archivo ya no existe
     }
 
     // --- Búsqueda ---
