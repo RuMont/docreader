@@ -220,6 +220,10 @@ public final class EpubActivity extends Activity {
         marco = new FrameLayout(this);
         web = new Vista(this);
         configurarWeb(web);
+        web.alDesplazar = () -> {
+            web.removeCallbacks(mostrarProgreso);
+            web.postDelayed(mostrarProgreso, 150);
+        };
         // Un toque muestra u oculta las barras; deslizar a los lados cambia de capítulo.
         android.view.GestureDetector gestos = new android.view.GestureDetector(this,
                 new android.view.GestureDetector.SimpleOnGestureListener() {
@@ -478,9 +482,15 @@ public final class EpubActivity extends Activity {
         ActionBar ab = getActionBar();
         if (ab != null && !l.autor.isEmpty()) ab.setSubtitle(l.autor);
         Recientes.registrar(this, uri, titulo, 0);
+        calcularPesos();
         SharedPreferences p = prefs();
-        int cap = p.getInt("c:" + uri, -1);
-        float frac = p.getFloat("f:" + uri, 0);
+        String h = l.huella.isEmpty() ? null : "h:" + l.huella;
+        int cap = h != null ? p.getInt("c:" + h, -1) : -1;
+        float frac = h != null ? p.getFloat("f:" + h, 0) : 0;
+        if (cap < 0) {
+            cap = p.getInt("c:" + uri, -1);
+            frac = p.getFloat("f:" + uri, 0);
+        }
         if (cap < 0) {
             cap = Recientes.pagina(this, uri);
             frac = 0;
@@ -698,7 +708,9 @@ public final class EpubActivity extends Activity {
         }
         etiquetaTitulo.setText(titulo);
         etiquetaTitulo.setVisibility(titulo.isEmpty() ? View.GONE : View.VISIBLE);
+        textoNumero = numero;
         etiquetaNumero.setText(numero);
+        mostrarProgreso.run();
         etiquetaNumero.setTextSize(titulo.isEmpty() ? 14 : 12);
         activar(botonAnterior, libro.anterior(actual) >= 0);
         activar(botonSiguiente, libro.siguiente(actual) >= 0);
@@ -760,12 +772,52 @@ public final class EpubActivity extends Activity {
 
     private void guardarPosicion() {
         if (libro == null || actual < 0 || uri == null) return;
-        prefs().edit()
+        float f = fraccionActual();
+        SharedPreferences.Editor e = prefs().edit()
                 .putInt("c:" + uri, actual)
-                .putFloat("f:" + uri, fraccionActual())
-                .apply();
+                .putFloat("f:" + uri, f);
+        // Por la huella del libro: se recupera aunque se abra desde otro sitio (u otra copia).
+        if (!libro.huella.isEmpty()) e.putInt("c:h:" + libro.huella, actual).putFloat("f:h:" + libro.huella, f);
+        e.apply();
         Recientes.guardarPagina(this, uri, actual);
+        Recientes.guardarProgreso(this, uri, porcentaje());
     }
+
+    // --- Progreso ---
+
+    /** Tamaño acumulado de las secciones del libro (las lineales), para calcular el porcentaje. */
+    private long[] acumulado;
+    private long totalLibro;
+
+    private void calcularPesos() {
+        int n = libro.secciones.size();
+        acumulado = new long[n];
+        long t = 0;
+        for (int i = 0; i < n; i++) {
+            acumulado[i] = t;
+            Libro.Seccion s = libro.secciones.get(i);
+            if (!s.lineal) continue;
+            long tam = archivo.tamano(s.ruta);
+            t += tam > 0 ? tam : 4096;
+        }
+        totalLibro = Math.max(1, t);
+    }
+
+    /** Porcentaje leído del libro entero (por el tamaño de cada capítulo y la posición en el actual). */
+    private int porcentaje() {
+        if (acumulado == null || actual < 0 || actual >= acumulado.length) return 0;
+        long fin = actual + 1 < acumulado.length ? acumulado[actual + 1] : totalLibro;
+        double p = (acumulado[actual] + fraccionActual() * (fin - acumulado[actual])) / totalLibro;
+        return (int) Math.max(0, Math.min(100, Math.floor(p * 100)));
+    }
+
+    private String textoNumero;
+
+    /** Actualiza «Capítulo 5 de 23 · 42 %» (se llama también al desplazarse, con un pequeño retraso). */
+    private final Runnable mostrarProgreso = () -> {
+        if (etiquetaNumero == null || libro == null || textoNumero == null) return;
+        etiquetaNumero.setText(textoNumero + " · " + porcentaje() + " %");
+    };
 
     private SharedPreferences prefs() {
         return getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -1114,8 +1166,15 @@ public final class EpubActivity extends Activity {
 
     /** WebView que sabe en qué fracción del capítulo está el lector. */
     static final class Vista extends WebView {
+        Runnable alDesplazar;
+
         Vista(Context c) {
             super(c);
+        }
+
+        @Override protected void onScrollChanged(int l, int t, int ol, int ot) {
+            super.onScrollChanged(l, t, ol, ot);
+            if (alDesplazar != null) alDesplazar.run();
         }
 
         private int recorrido() {

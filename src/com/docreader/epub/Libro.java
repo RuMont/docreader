@@ -46,6 +46,11 @@ final class Libro {
     }
 
     String titulo = "", autor = "", idioma = "", identificador = "";
+    /**
+     * Huella del libro (SHA-1 del documento OPF: identificador, metadatos y lista de archivos). Es
+     * la misma se abra desde donde se abra, así la posición de lectura no depende de la ruta.
+     */
+    String huella = "";
     final List<Seccion> secciones = new ArrayList<>();
     final List<Entrada> indice = new ArrayList<>();
     /** Ruta en minúsculas → media-type del manifiesto. */
@@ -222,6 +227,13 @@ final class Libro {
     private void leerOpf(Archivo zip, String opf, Map<String, String[]> manifiesto, String[] toc,
                          List<String[]> spine) throws Fallo {
         byte[] b = zip.leer(opf, MAX_XML);
+        if (b != null) {
+            try {
+                StringBuilder h = new StringBuilder();
+                for (byte x : java.security.MessageDigest.getInstance("SHA-1").digest(b)) h.append(String.format("%02x", x));
+                huella = h.toString();
+            } catch (java.security.NoSuchAlgorithmException ignorado) { }
+        }
         if (b == null) throw new Fallo("El libro está dañado: no se puede leer su descripción (OPF).");
         Marcado m = new Marcado(Marcado.texto(b));
         String idUnico = null, primerIdentificador = null;

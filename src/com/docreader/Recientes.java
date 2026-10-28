@@ -148,6 +148,17 @@ public final class Recientes {
         escribir(c, nueva);
     }
 
+    /** Progreso de lectura (0–100) para mostrarlo en la lista (libros EPUB). */
+    public static synchronized void guardarProgreso(Context c, Uri uri, int porcentaje) {
+        JSONArray a = leer(c);
+        int i = indice(a, uri);
+        if (i < 0) return;
+        try {
+            a.getJSONObject(i).put("progreso", porcentaje);
+        } catch (JSONException ignorado) { }
+        escribir(c, a);
+    }
+
     public static synchronized void guardarPagina(Context c, Uri uri, int pagina) {
         JSONArray a = leer(c);
         int i = indice(a, uri);

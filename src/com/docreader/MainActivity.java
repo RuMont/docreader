@@ -104,8 +104,10 @@ public final class MainActivity extends Activity {
                 String fecha = DateUtils.getRelativeTimeSpanString(o.optLong("fecha")).toString();
                 String tipo = TipoDoc.nombre(nombre);
                 boolean perdido = sinAcceso.contains(o.optString("uri"));
+                String avance = total > 0 ? "Pág. " + pag + " de " + total + " · "
+                        : o.has("progreso") ? o.optInt("progreso") + " % leído · " : "";
                 f.detalle.setText(perdido ? "No disponible · tócalo para buscarlo"
-                        : (tipo.isEmpty() ? "" : tipo + " · ") + (total > 0 ? "Pág. " + pag + " de " + total + " · " : "") + fecha);
+                        : (tipo.isEmpty() ? "" : tipo + " · ") + avance + fecha);
                 f.raiz.setAlpha(perdido ? 0.55f : 1f);
                 f.opciones.setOnClickListener(x -> opciones(o));
                 return f.tarjeta;
